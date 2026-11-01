@@ -1,0 +1,44 @@
+# /opt/asiri/docker-compose.yml (architecture §15.4)
+# Both services use host networking: LiveKit recommends it for media, and it keeps the firewall
+# simple (Docker's published-port rules can bypass the host firewall).
+name: asiri
+
+services:
+  relay:
+    build:
+      context: ./src
+      dockerfile: server/deploy/relay.Dockerfile
+      network: host
+    image: asiri-relay:local
+    restart: unless-stopped
+    network_mode: host
+    user: "10001:10010"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      ASIRI_LISTEN: "127.0.0.1:8080"
+      ASIRI_PUBLIC_ADDRESS: "${ASIRI_ONION_ADDRESS:?run install.sh first}"
+      ASIRI_LIVEKIT_KEYS_FILE: /run/secrets/livekit_keys
+      ASIRI_LOG: warn
+    volumes:
+      - ./data/relay:/var/lib/asiri                  # SQLite database and encrypted files
+      - ./data/authorized:/var/lib/asiri-authorized  # desired onion client keys
+      - ./secrets/livekit_keys:/run/secrets/livekit_keys:ro
+    tmpfs:
+      - /tmp:size=16m
+
+  livekit:
+    image: livekit/livekit-server:v1.13.10   # pinned; rebuild/re-pin monthly (§14.2)
+    restart: unless-stopped
+    network_mode: host
+    user: "10002:10010"
+    command: --config /etc/livekit.yaml
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - ./secrets/livekit_keys:/etc/livekit-keys.yaml:ro
+    tmpfs:
+      - /tmp:size=64m

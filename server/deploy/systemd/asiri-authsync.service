@@ -1,0 +1,7 @@
+[Unit]
+Description=Install Asiri's authorized onion client keys into tor
+After=tor.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/asiri-authsync

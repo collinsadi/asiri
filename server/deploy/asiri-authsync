@@ -1,0 +1,39 @@
+#!/bin/bash
+# asiri-authsync — the only bridge between the relay and tor (architecture §15.6).
+# Validates every key the relay wants authorized, installs it into tor's authorized_clients
+# directory with the right owner, removes revoked keys, and reloads tor if anything changed.
+# The relay never gets write access to tor's own directory.
+set -euo pipefail
+SRC=/opt/asiri/data/authorized
+DST=/var/lib/tor/asiri/authorized_clients
+TOR_USER=debian-tor
+
+install -d -o "$TOR_USER" -g "$TOR_USER" -m 700 "$DST"
+changed=0
+
+for f in "$SRC"/*.auth; do
+  [ -e "$f" ] || continue
+  name=$(basename "$f")
+  [[ "$name" =~ ^[0-9a-f]{32}\.auth$ ]] || { logger -t asiri-authsync "ignored a file with an unexpected name"; continue; }
+  line=$(head -c 128 "$f" | head -n 1)
+  [[ "$line" =~ ^descriptor:x25519:[A-Z2-7]{52}$ ]] || { logger -t asiri-authsync "ignored a malformed key"; continue; }
+  if [ "$(cat "$DST/$name" 2>/dev/null)" != "$line" ]; then
+    printf '%s\n' "$line" > "$DST/.$name.tmp"
+    chown "$TOR_USER:$TOR_USER" "$DST/.$name.tmp"
+    chmod 600 "$DST/.$name.tmp"
+    mv "$DST/.$name.tmp" "$DST/$name"
+    changed=1
+  fi
+done
+
+for f in "$DST"/*.auth; do
+  [ -e "$f" ] || continue
+  name=$(basename "$f")
+  [ "$name" = "placeholder.auth" ] && continue   # keeps discovery restricted before bootstrap
+  if [ ! -e "$SRC/$name" ]; then rm -f "$f"; changed=1; fi
+done
+
+if [ "$changed" = 1 ]; then
+  systemctl reload tor || systemctl restart tor
+  logger -t asiri-authsync "authorized onion clients updated"
+fi

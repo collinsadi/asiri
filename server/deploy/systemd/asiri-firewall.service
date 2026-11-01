@@ -1,0 +1,13 @@
+[Unit]
+Description=Asiri host firewall (nftables table inet asiri)
+Wants=network-pre.target
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/asiri/nftables-asiri.nft
+ExecStop=/usr/sbin/nft delete table inet asiri
+
+[Install]
+WantedBy=multi-user.target

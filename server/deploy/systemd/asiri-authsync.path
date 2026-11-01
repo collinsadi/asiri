@@ -1,0 +1,11 @@
+# Watches the relay's desired onion client keys (architecture §15.6).
+[Unit]
+Description=Watch Asiri's authorized onion client keys
+
+[Path]
+PathChanged=/opt/asiri/data/authorized
+PathModified=/opt/asiri/data/authorized
+Unit=asiri-authsync.service
+
+[Install]
+WantedBy=multi-user.target

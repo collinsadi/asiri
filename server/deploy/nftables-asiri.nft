@@ -1,0 +1,18 @@
+#!/usr/sbin/nft -f
+# Asiri host firewall (architecture §15.5), in its own table so Docker's rules are untouched.
+# Only LiveKit media is public. SSH on 22/tcp stays open until you run install.sh --lockdown
+# after confirming SSH over the admin onion service works.
+table inet asiri
+delete table inet asiri
+table inet asiri {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iif "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+    meta l4proto { icmp, ipv6-icmp } accept
+    tcp dport 7881 accept   # LiveKit media over TCP
+    udp dport 7882 accept   # LiveKit media over UDP
+    @SSH_RULE@
+  }
+}
