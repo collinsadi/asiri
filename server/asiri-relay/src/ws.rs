@@ -299,16 +299,18 @@ impl Session {
         if !self.state.limiter.check(&self.device_id, Kind::Send) {
             return Ok(result(Status::RateLimited));
         }
-        if s.envelope_id.len() != asiri_proto::ID_LEN
-            || s.to_inboxes.is_empty()
-            || s.to_inboxes.len() > MAX_RECIPIENTS
-        {
-            return Err(RelayError::BadRequest("invalid send"));
-        }
         let kind = wire::PayloadKind::try_from(s.kind)
             .map_err(|_| RelayError::BadRequest("unknown payload kind"))?;
         if kind == wire::PayloadKind::Unspecified {
             return Err(RelayError::BadRequest("unknown payload kind"));
+        }
+        // A commit in a group where the committer is (still) the only member has no recipients,
+        // but must still be ordered so the route's epoch advances.
+        if s.envelope_id.len() != asiri_proto::ID_LEN
+            || (s.to_inboxes.is_empty() && kind != wire::PayloadKind::Commit)
+            || s.to_inboxes.len() > MAX_RECIPIENTS
+        {
+            return Err(RelayError::BadRequest("invalid send"));
         }
         let mut recipients = Vec::with_capacity(s.to_inboxes.len());
         for inbox in &s.to_inboxes {

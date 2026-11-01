@@ -903,6 +903,11 @@ mod tests {
             assert_eq!(a2, FanOut::Queued(CommitOutcome::Accepted));
             let next = fan_out(c, &inboxes, &env(&[3; 16], b"c"), Some((&route, 1)), 100, 0)?;
             assert_eq!(next, FanOut::Queued(CommitOutcome::Accepted));
+            // A commit with no other recipients (the creator alone in a new group) is ordered too.
+            let solo = fan_out(c, &[], &env(&[5; 16], b"e"), Some((&[6; 16], 0)), 100, 0)?;
+            assert_eq!(solo, FanOut::Queued(CommitOutcome::Accepted));
+            let solo_next = fan_out(c, &inboxes, &env(&[7; 16], b"f"), Some((&[6; 16], 1)), 100, 0)?;
+            assert_eq!(solo_next, FanOut::Queued(CommitOutcome::Accepted));
             // A brand-new route must start at epoch 0.
             let wrong = fan_out(
                 c,
@@ -916,7 +921,7 @@ mod tests {
                 wrong,
                 FanOut::Queued(CommitOutcome::StaleEpoch { current_epoch: 0 })
             );
-            assert_eq!(queued_count(c, &inboxes[0])?, 2);
+            assert_eq!(queued_count(c, &inboxes[0])?, 3);
             Ok(())
         })
         .unwrap();
