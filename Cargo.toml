@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "core/asiri-proto",
+    "server/asiri-relay",
     "tools/proto-gen",
 ]
 

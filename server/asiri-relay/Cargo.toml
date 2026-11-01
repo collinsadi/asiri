@@ -1,0 +1,48 @@
+[package]
+name = "asiri-relay"
+description = "Asiri's store-and-forward relay: mailboxes, key packages, commit ordering, encrypted blobs and call tokens"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+asiri-proto.workspace = true
+prost.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+axum.workspace = true
+bytes.workspace = true
+http.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+ed25519-dalek.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+subtle.workspace = true
+getrandom.workspace = true
+base64.workspace = true
+hex.workspace = true
+data-encoding.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+qrcode.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-tungstenite.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+
+[lints]
+workspace = true
