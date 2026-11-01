@@ -8,5 +8,7 @@
 pub mod crypto;
 pub mod error;
 pub mod ids;
+pub mod mls;
+pub mod store;
 
 pub use error::{CoreError, CoreResult};
