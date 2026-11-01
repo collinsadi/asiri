@@ -37,6 +37,8 @@ pub mod pairing {
 
 pub use prost::Message;
 
+pub mod pairing_text;
+
 /// The relay protocol version spoken by this build.
 pub const RELAY_PROTOCOL_VERSION: u32 = 1;
 
