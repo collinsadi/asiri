@@ -10,6 +10,10 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "asiri-relay"
+path = "src/main.rs"
+
 [dependencies]
 asiri-proto.workspace = true
 prost.workspace = true
