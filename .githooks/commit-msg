@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Enforces the commit rules in CONTRIBUTING.md:
+#   * Conventional Commits subject line (<type>(<scope>)!: <summary>), <= 72 chars
+#   * no AI attribution trailers of any kind
+set -euo pipefail
+
+msg_file="$1"
+subject="$(grep -v '^#' "$msg_file" | head -n 1)"
+
+# Allow git's own generated subjects.
+if [[ "$subject" =~ ^(Merge|Revert\ \"|fixup!|squash!|amend!) ]]; then
+  exit 0
+fi
+
+types='feat|fix|perf|refactor|test|docs|build|ci|chore|style|revert'
+if ! [[ "$subject" =~ ^(${types})(\([a-z0-9._/-]+\))?!?:\ [^[:space:]].*$ ]]; then
+  echo "commit-msg: subject must follow Conventional Commits, e.g. 'feat(relay): order commits per epoch'" >&2
+  echo "            got: $subject" >&2
+  exit 1
+fi
+
+if (( ${#subject} > 72 )); then
+  echo "commit-msg: subject is ${#subject} characters; keep it to 72 or fewer" >&2
+  exit 1
+fi
+
+if "$(dirname "$0")/../scripts/check-commit-message.sh" "$msg_file"; then
+  exit 0
+else
+  exit 1
+fi

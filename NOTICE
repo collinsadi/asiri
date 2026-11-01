@@ -1,0 +1,13 @@
+Asiri
+Copyright 2026 Collins Adi
+
+This product includes software developed by third parties, used under their
+respective licenses, including:
+
+  * OpenMLS (MIT) — https://github.com/openmls/openmls
+  * libcrux (Apache-2.0) — https://github.com/cryspen/libcrux
+  * Arti (MIT OR Apache-2.0) — https://gitlab.torproject.org/tpo/core/arti
+  * SQLCipher (BSD-style) — https://www.zetetic.net/sqlcipher/
+  * LiveKit (Apache-2.0) — https://github.com/livekit
+  * UniFFI (MPL-2.0) — https://github.com/mozilla/uniffi-rs
+  * The RustCrypto project crates (MIT OR Apache-2.0)

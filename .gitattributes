@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.icns binary
+*.jpg binary
+*.pdf binary
+Cargo.lock linguist-generated=true
+apps/macos/Packages/**/Generated/** linguist-generated=true

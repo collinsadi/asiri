@@ -1,0 +1,41 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode / SwiftPM
+apps/macos/Asiri.xcodeproj/
+apps/macos/build/
+apps/macos/DerivedData/
+**/.build/
+**/.swiftpm/
+*.xcuserstate
+xcuserdata/
+*.xcresult
+
+# Generated Rust → Swift bridge (rebuilt by tools/release/build-xcframework.sh)
+apps/macos/Frameworks/
+apps/macos/Packages/AsiriCoreBridge/Sources/AsiriCoreFFI/
+apps/macos/Packages/AsiriCoreBridge/Sources/AsiriCoreBridge/Generated/
+
+# Local runtime data and secrets — never commit these
+/.asiri-dev/
+/.agent/
+server/deploy/secrets/
+server/deploy/data/
+*.pem
+*.key
+.env
+.env.*
+
+# Test and tooling output
+/dist/
+/artifacts/
+/snapshots/
+*.profraw
+lcov.info
+node_modules/
