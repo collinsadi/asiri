@@ -1,0 +1,17 @@
+[package]
+name = "asiri-proto"
+description = "Asiri wire protocols (relay.v1, app.v1, pairing.v1) generated from proto/"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+prost.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

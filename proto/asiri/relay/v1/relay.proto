@@ -1,0 +1,227 @@
+// Asiri relay protocol, version 1 (architecture §9.2–§9.3).
+//
+// Everything here travels between a device and its relay, inside the onion-service connection.
+// The relay only ever sees random identifiers and padded ciphertext. Identifiers:
+//   device_id, inbox_id, envelope_id, blob_id, group_route: 16 random bytes.
+//
+// WebSocket (`GET /v1/ws`): one binary frame per ClientFrame / ServerFrame.
+// HTTP: `POST /v1/register`, `PUT|GET /v1/blobs/{id}`, `GET /v1/releases/latest`, `GET /v1/health`.
+syntax = "proto3";
+package asiri.relay.v1;
+
+// ─── WebSocket framing ──────────────────────────────────────────────────────
+
+message ClientFrame {
+  uint64 req_id = 1; // echoed in the matching ServerFrame
+  oneof body {
+    AuthResponse auth = 2;
+    Send send = 3;
+    Ack ack = 4;
+    PutKeyPackages put_key_packages = 5;
+    FetchKeyPackage fetch_key_package = 6;
+    AuthorizeDevice authorize_device = 7;
+    RevokeDevice revoke_device = 8;
+    CallTokenRequest call_token = 9;
+    Ping ping = 10;
+    ListDevices list_devices = 11;
+    KeyPackageCountRequest key_package_count = 12;
+  }
+}
+
+message ServerFrame {
+  uint64 req_id = 1; // 0 for frames the server initiates
+  oneof body {
+    AuthChallenge challenge = 2;
+    AuthOk auth_ok = 3;
+    Deliver deliver = 4;
+    SendResult send_result = 5;
+    KeyPackage key_package = 6;
+    DeviceAuthorized device_authorized = 7;
+    CallToken call_token = 8;
+    Error error = 9;
+    Pong pong = 10;
+    Ok ok = 11;
+    DeviceList device_list = 12;
+    KeyPackageCount key_package_count = 13;
+    QueueDrained queue_drained = 14;
+  }
+}
+
+// ─── Authentication (§8.4) ──────────────────────────────────────────────────
+
+// Sent by the relay as soon as the WebSocket opens.
+message AuthChallenge {
+  bytes nonce = 1;            // 32 random bytes
+  uint32 protocol_version = 2;
+}
+
+// signature = Ed25519(relay_auth_key, "asiri-relay-auth-v1" || nonce || service_address)
+// where service_address is the relay address the device dialled (e.g. "<56 chars>.onion").
+message AuthResponse {
+  bytes device_id = 1;
+  bytes signature = 2;
+}
+
+message AuthOk {
+  bytes session_token = 1;    // bearer token for this session's HTTP calls
+  uint32 protocol_version = 2;
+  bytes inbox_id = 3;
+  bool is_admin = 4;
+  uint32 pending_envelopes = 5;
+}
+
+// ─── Messaging ──────────────────────────────────────────────────────────────
+
+enum PayloadKind {
+  PAYLOAD_KIND_UNSPECIFIED = 0;
+  PAYLOAD_KIND_APPLICATION = 1; // MLS PrivateMessage carrying app content
+  PAYLOAD_KIND_COMMIT = 2;      // MLS PrivateMessage carrying a commit (ordered by the relay)
+  PAYLOAD_KIND_PROPOSAL = 3;    // MLS PrivateMessage carrying a proposal
+  PAYLOAD_KIND_WELCOME = 4;     // MLS Welcome for a new member
+  PAYLOAD_KIND_DEVICE_LINK = 5; // Signed message linking a new device to a user
+}
+
+message Send {
+  bytes envelope_id = 1;         // 16 random bytes; makes retries idempotent
+  PayloadKind kind = 2;
+  bytes group_route = 3;         // required for commits
+  uint64 epoch = 4;              // required for commits: the epoch being committed from
+  repeated bytes to_inboxes = 5; // recipients; the server fans out
+  bytes payload = 6;             // padded MLS message
+  uint32 ttl_seconds = 7;        // optional; capped by server policy
+}
+
+message SendResult {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_ACCEPTED = 1;
+    STATUS_STALE_EPOCH = 2;
+    STATUS_UNKNOWN_INBOX = 3;
+    STATUS_TOO_LARGE = 4;
+    STATUS_RATE_LIMITED = 5;
+    STATUS_INBOX_FULL = 6;
+  }
+  Status status = 1;
+  uint64 current_epoch = 2;      // set with STATUS_STALE_EPOCH
+  repeated bytes unknown_inboxes = 3; // set with STATUS_UNKNOWN_INBOX
+}
+
+message Deliver {
+  uint64 seq = 1;                // per-inbox sequence number, strictly increasing
+  bytes envelope_id = 2;
+  PayloadKind kind = 3;
+  bytes payload = 4;
+}
+
+message Ack { repeated uint64 seqs = 1; }
+
+// Sent once the backlog that was waiting at connect time has been delivered.
+message QueueDrained {}
+
+// ─── Key packages (§7.3) ────────────────────────────────────────────────────
+
+message PutKeyPackages {
+  repeated bytes key_packages = 1; // one-time packages, appended to the pool
+  bytes last_resort = 2;           // replaces the previous last-resort package when set
+}
+
+message FetchKeyPackage { bytes device_id = 1; }
+message KeyPackage { bytes device_id = 1; bytes key_package = 2; }
+
+message KeyPackageCountRequest {}
+message KeyPackageCount { uint32 one_time = 1; bool has_last_resort = 2; }
+
+// ─── Devices (§9.4) ─────────────────────────────────────────────────────────
+
+message AuthorizeDevice {
+  bytes onion_client_key = 1;    // X25519 restricted-discovery public key (32 bytes)
+  bytes auth_pubkey = 2;         // Ed25519 relay auth key (32 bytes)
+}
+
+message DeviceAuthorized {
+  bytes device_id = 1;
+  bytes inbox_id = 2;
+  bytes registration_secret = 3; // one-time, 32 bytes, valid for 24 hours
+}
+
+message RevokeDevice { bytes device_id = 1; }
+
+message ListDevices {}
+
+message DeviceList {
+  message Entry {
+    bytes device_id = 1;
+    uint32 state = 2;            // 0 pending, 1 active, 2 revoked
+    bool is_admin = 3;
+  }
+  repeated Entry devices = 1;
+  string invite_policy = 2;      // "admins" or "members"
+  uint64 stored_blob_bytes = 3;
+  uint64 queued_envelopes = 4;
+}
+
+// HTTP `POST /v1/register` (body: RegisterRequest, response: RegisterResponse).
+// signature = Ed25519(auth key, "asiri-relay-register-v1" || registration_secret || auth_pubkey)
+message RegisterRequest {
+  bytes registration_secret = 1;
+  bytes auth_pubkey = 2;
+  bytes signature = 3;
+}
+
+message RegisterResponse {
+  bytes device_id = 1;
+  bytes inbox_id = 2;
+  bool is_admin = 3;
+}
+
+// ─── Calls (§10.4) ──────────────────────────────────────────────────────────
+
+message CallTokenRequest { string room_alias = 1; }
+message CallToken {
+  string jwt = 1;
+  uint32 expires_in_s = 2;
+  string identity = 3;           // the random participant alias inside the token
+}
+
+// ─── Blobs (§8.5) ───────────────────────────────────────────────────────────
+
+// HTTP `GET /v1/blobs/{id}/status`.
+message BlobStatus {
+  uint64 received = 1;           // bytes stored so far; resume uploading from here
+  bool complete = 2;
+  uint64 size = 3;               // declared total size
+}
+
+// ─── Health (§9.2) ──────────────────────────────────────────────────────────
+
+message Health {
+  string status = 1;             // "ok"
+  uint32 protocol_version = 2;
+  string server_version = 3;
+}
+
+// ─── Generic replies ────────────────────────────────────────────────────────
+
+message Ok {}
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_BAD_REQUEST = 1;
+  ERROR_CODE_UNAUTHENTICATED = 2;
+  ERROR_CODE_FORBIDDEN = 3;
+  ERROR_CODE_NOT_FOUND = 4;
+  ERROR_CODE_RATE_LIMITED = 5;
+  ERROR_CODE_TOO_LARGE = 6;
+  ERROR_CODE_QUOTA_EXCEEDED = 7;
+  ERROR_CODE_CONFLICT = 8;
+  ERROR_CODE_UNSUPPORTED_VERSION = 9;
+  ERROR_CODE_INTERNAL = 10;
+}
+
+message Error {
+  ErrorCode code = 1;
+  string detail = 2;             // human-readable; never echoes identifiers
+}
+
+message Ping { uint64 nonce = 1; }
+message Pong { uint64 nonce = 1; }

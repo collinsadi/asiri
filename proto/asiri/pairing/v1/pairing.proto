@@ -1,0 +1,55 @@
+// Asiri in-person pairing payloads (architecture §11.2).
+//
+// These never touch the relay: they are shown as QR codes (or pasted as text) between two Macs
+// in the same room. Text form: "ASIRI1:" + base64url(no padding) of a PairingPayload.
+syntax = "proto3";
+package asiri.pairing.v1;
+
+// How to reach a relay.
+message RelayEndpoint {
+  enum Transport {
+    TRANSPORT_UNSPECIFIED = 0;
+    TRANSPORT_ONION = 1;         // address is "<56 chars>.onion"; port 80 relay, 7880 calls
+    TRANSPORT_DIRECT = 2;        // address is "host:port" (development only, not anonymous)
+  }
+  Transport transport = 1;
+  string address = 2;
+  string call_address = 3;       // optional; defaults to the relay address with the call port
+}
+
+// A device's public contact details.
+message ContactCard {
+  bytes user_id = 1;
+  bytes device_id = 2;
+  bytes inbox_id = 3;
+  bytes signature_key = 4;       // Ed25519 MLS signature public key; its hash is the fingerprint
+  string display_name = 5;       // shown only to the person scanning, in the same room
+}
+
+// QR-A: shown by a new device that wants to join (step 1 of §11.2).
+message DeviceOffer {
+  bytes user_id = 1;
+  bytes onion_client_key = 2;    // X25519 public key for restricted discovery
+  bytes auth_pubkey = 3;         // Ed25519 relay auth public key
+  bytes signature_key = 4;       // Ed25519 MLS signature public key
+  string display_name = 5;
+}
+
+// QR-B: shown by the inviter after authorizing the new device (step 6 of §11.2),
+// or printed by `asiri-relay admin bootstrap` for the first admin device.
+message Invitation {
+  RelayEndpoint relay = 1;
+  bytes registration_secret = 2;
+  bytes device_id = 3;
+  bytes inbox_id = 4;
+  ContactCard inviter = 5;       // absent for the bootstrap invitation
+}
+
+message PairingPayload {
+  uint32 version = 1;            // 1
+  oneof body {
+    DeviceOffer offer = 2;
+    Invitation invitation = 3;
+    ContactCard contact = 4;
+  }
+}

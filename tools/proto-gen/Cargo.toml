@@ -1,0 +1,16 @@
+[package]
+name = "proto-gen"
+description = "Regenerates core/asiri-proto/src/gen from proto/ (maintainers only)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+prost-build.workspace = true
+protoc-bin-vendored.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true
