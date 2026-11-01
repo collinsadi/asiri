@@ -1,0 +1,108 @@
+[workspace]
+resolver = "3"
+members = [
+    "core/asiri-proto",
+    "tools/proto-gen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "Apache-2.0"
+repository = "https://github.com/collinsadi/asiri"
+authors = ["Collins Adi"]
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+asiri-proto = { path = "core/asiri-proto" }
+asiri-core = { path = "core/asiri-core", default-features = false }
+asiri-relay = { path = "server/asiri-relay" }
+
+# Protocol Buffers
+prost = "0.14"
+prost-build = "0.14"
+protoc-bin-vendored = "3.3"
+
+# MLS (see docs/adr/0002-openmls-libcrux-xwing.md)
+openmls = { version = "=0.9.2", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_traits = { version = "=0.6.0", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_libcrux_crypto = { version = "=0.4.0", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_sqlite_storage = { version = "=0.3.0", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_basic_credential = { version = "=0.6.0", features = ["draft-ietf-mls-pq-ciphersuites"] }
+tls_codec = { version = "0.5", features = ["derive", "serde", "mls"] }
+
+# Storage. rusqlite must stay on the version openmls_sqlite_storage uses (one libsqlite3-sys).
+rusqlite = { version = "0.37", default-features = false }
+
+# Cryptography (RustCrypto + dalek, aligned with what Arti already pulls in)
+chacha20poly1305 = { version = "0.10", features = ["stream"] }
+ed25519-dalek = { version = "2.2", features = ["zeroize"] }
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
+sha2 = "0.10"
+hkdf = "0.12"
+hmac = "0.12"
+subtle = "2.6"
+zeroize = { version = "1.8", features = ["derive"] }
+getrandom = { version = "0.3", features = ["std"] }
+
+# Async, networking
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "signal"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures = "0.3"
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws", "query"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+http = "1"
+bytes = "1"
+
+# Tor (feature-gated in asiri-core; see docs/adr/0003-direct-transport-for-development.md)
+arti-client = { version = "0.47", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client", "keymgr", "experimental-api"] }
+tor-rtcompat = { version = "0.47", default-features = false, features = ["tokio", "rustls"] }
+
+# FFI
+uniffi = { version = "0.32", features = ["tokio"] }
+
+# Encoding, utilities
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+hex = "0.4"
+data-encoding = "2.6"
+blurhash = "0.2"
+qrcode = { version = "0.14", default-features = false }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi", "std"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Test-only
+proptest = "1.6"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+print_stdout = "warn"
+mem_forget = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+debug = false
+panic = "unwind"   # UniFFI turns Rust panics into Swift errors; aborting would crash the app
+
+[profile.dev.package."*"]
+opt-level = 1      # keeps crypto-heavy dependencies usable in debug test runs
