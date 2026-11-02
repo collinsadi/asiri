@@ -53,9 +53,10 @@ struct MainView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             ChatListView(app: app)
-                .navigationSplitViewColumnWidth(min: 260, ideal: Metrics.sidebarWidth, max: 420)
                 // Only the sidebar column can remove its toggle; the chat list is always there.
                 .toolbar(removing: .sidebarToggle)
+                // Outermost, so the split view sees the column's width.
+                .navigationSplitViewColumnWidth(min: 260, ideal: Metrics.sidebarWidth, max: 420)
         } detail: {
             ZStack {
                 if let id = app.selectedChatID, app.selectedChat != nil {
