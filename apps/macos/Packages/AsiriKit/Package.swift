@@ -4,6 +4,7 @@
 //   AsiriDesign    colors, type, bubbles, avatars, wallpaper, motion
 //   AsiriDomain    the app's models and the CoreService protocol, plus PreviewCore
 //   AsiriPlatform  Keychain and Secure Enclave, app lock, notifications, QR, media, system events
+//   AsiriFeatures  the app state and every screen
 //
 // The real core comes from the AsiriCoreBridge package, so these targets build without
 // compiling Rust.
@@ -14,6 +15,7 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "AsiriKit", targets: ["AsiriFeatures", "AsiriPlatform", "AsiriDomain", "AsiriDesign"]),
         .library(name: "AsiriDomain", targets: ["AsiriDomain"]),
     ],
     targets: [
@@ -32,5 +34,6 @@ let package = Package(
                 .linkedFramework("Network"),
             ]
         ),
+        .target(name: "AsiriFeatures", dependencies: ["AsiriDomain", "AsiriDesign", "AsiriPlatform"]),
     ]
 )
