@@ -97,7 +97,9 @@ public final class AppModel {
     @ObservationIgnored public var onPanicWipe: (() -> Void)?
     @ObservationIgnored private var inactiveSince: Date?
 
-    public init(core: CoreService, prefs: Preferences = .shared) {
+    /// `prefs` is `.shared` in the app and `.ephemeral()` in demo mode and tests. It has no
+    /// default: a default value can't use the main actor's `.shared` from the caller's context.
+    public init(core: CoreService, prefs: Preferences) {
         self.core = core
         self.prefs = prefs
     }

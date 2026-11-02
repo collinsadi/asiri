@@ -531,11 +531,13 @@ struct PhotoView: View {
         }
         let id = message.id
         let core = model.app.core
-        let image = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+        // Reading and decrypting happen off the main actor. Only the bytes cross back:
+        // NSImage isn't Sendable, and it decodes lazily anyway.
+        let data = await Task.detached(priority: .userInitiated) { () -> Data? in
             guard let data = try? core.attachmentData(id), !data.isEmpty else { return nil }
-            return NSImage(data: data)
+            return data
         }.value
-        if let image {
+        if let data, let image = NSImage(data: data) {
             ImageCache.shared.set(image, for: id)
             full = image
         }
