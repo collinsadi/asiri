@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Asiri</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Asiri</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.social-networking</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Àṣírí · Between us. Apache License 2.0.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Asiri uses the camera to scan a friend's pairing code and for video calls. Nothing is recorded.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Asiri uses the microphone for calls and voice messages, which are encrypted before they leave your Mac.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Calls reach LiveKit through the core's ws://127.0.0.1 signaling bridge (§6.9). -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<!-- The Ed25519 key that signs release manifests, base64. Empty turns update checks off. -->
+	<key>AsiriReleasePublicKey</key>
+	<string>$(ASIRI_RELEASE_PUBLIC_KEY)</string>
+</dict>
+</plist>

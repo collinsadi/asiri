@@ -26,6 +26,7 @@ let package = Package(
                 .linkedFramework("SystemConfiguration"),
                 .linkedFramework("CoreFoundation"),
                 .linkedLibrary("resolv"),
+                .linkedLibrary("iconv"),
                 .linkedLibrary("c++"),
             ]
         ),

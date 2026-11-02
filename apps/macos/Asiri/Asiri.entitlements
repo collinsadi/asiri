@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Architecture §6.9: the sandbox plus exactly what Asiri needs, nothing else. -->
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Tor to the relay, and call media to LiveKit. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- The loopback-only call signaling bridge. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<!-- QR pairing and video calls. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<!-- Calls and voice messages. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!-- Attaching and saving files the user picks. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+</dict>
+</plist>

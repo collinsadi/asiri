@@ -1,0 +1,67 @@
+# The Xcode project is generated from this file (XcodeGen), so it never drifts or conflicts:
+#   cd apps/macos && xcodegen generate
+# scripts/ship.sh does this for you. The generated Asiri.xcodeproj is not committed.
+name: Asiri
+options:
+  bundleIdPrefix: com.collinsadi
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # The Ed25519 key that signs release manifests (base64). Release builds set it; empty
+    # turns update checks off.
+    ASIRI_RELEASE_PUBLIC_KEY: ""
+packages:
+  AsiriKit:
+    path: Packages/AsiriKit
+  AsiriCoreBridge:
+    path: Packages/AsiriCoreBridge
+  AsiriCalls:
+    path: Packages/AsiriCalls
+targets:
+  Asiri:
+    type: application
+    platform: macOS
+    sources:
+      - path: Asiri
+        excludes:
+          - Info.plist
+          - Asiri.entitlements
+    dependencies:
+      - package: AsiriKit
+        product: AsiriKit
+      - package: AsiriCoreBridge
+        product: AsiriCoreBridge
+      - package: AsiriCalls
+        product: AsiriCalls
+    settings:
+      base:
+        PRODUCT_NAME: Asiri
+        PRODUCT_BUNDLE_IDENTIFIER: com.collinsadi.asiri
+        INFOPLIST_FILE: Asiri/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Asiri/Asiri.entitlements
+        # §6.9: Hardened Runtime on, with no exceptions. Ad-hoc local builds turn it off
+        # (scripts/ship.sh), because library validation rejects ad-hoc-signed frameworks.
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+    scheme:
+      commandLineArguments:
+        "--demo": false
+      environmentVariables:
+        ASIRI_LOG: ""
