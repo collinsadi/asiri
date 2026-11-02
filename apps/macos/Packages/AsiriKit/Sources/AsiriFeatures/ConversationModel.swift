@@ -155,15 +155,19 @@ public final class ConversationModel {
         var out: [TimelineRow] = []
         let calendar = Calendar.current
         let isGroup = chat?.kind == .group
-        for (i, m) in messages.enumerated() {
-            if i == 0 || !calendar.isDate(messages[i - 1].sentAt, inSameDayAs: m.sentAt) {
+        // A DM opens with the core's "only the two of you" line; at the start of history the
+        // encryption card above the timeline already says it, more fully.
+        let skipOpening = !hasMoreHistory && chat?.kind == .direct && messages.count > 1 && messages.first?.kind == .system
+        let shown = skipOpening ? Array(messages.dropFirst()) : messages
+        for (i, m) in shown.enumerated() {
+            if i == 0 || !calendar.isDate(shown[i - 1].sentAt, inSameDayAs: m.sentAt) {
                 out.append(.day(calendar.startOfDay(for: m.sentAt)))
             }
             if m.id == firstUnreadID {
                 out.append(.unreadMarker(unreadAtOpen))
             }
-            let prev = i > 0 ? messages[i - 1] : nil
-            let next = i + 1 < messages.count ? messages[i + 1] : nil
+            let prev = i > 0 ? shown[i - 1] : nil
+            let next = i + 1 < shown.count ? shown[i + 1] : nil
             let above = prev.map { Self.joins($0, m, calendar) } ?? false
             let below = next.map { Self.joins(m, $0, calendar) && $0.id != firstUnreadID } ?? false
             let grouping = BubbleGrouping(
