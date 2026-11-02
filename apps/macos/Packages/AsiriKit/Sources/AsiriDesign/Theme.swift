@@ -92,12 +92,18 @@ public enum Palette {
         .dynamic(light: 0x3949AB, dark: 0x9FA8DA),
     ]
 
-    /// A stable index for an ID.
+    /// A stable index for an ID: FNV-1a, then a final avalanche so that the low bits (all a
+    /// small modulus looks at) depend on every byte.
     public static func index(for id: Data, count: Int) -> Int {
         var h: UInt32 = 2_166_136_261
         for b in id {
             h = (h ^ UInt32(b)) &* 16_777_619
         }
+        h ^= h >> 16
+        h = h &* 0x85EB_CA6B
+        h ^= h >> 13
+        h = h &* 0xC2B2_AE35
+        h ^= h >> 16
         return Int(h % UInt32(max(count, 1)))
     }
 }
