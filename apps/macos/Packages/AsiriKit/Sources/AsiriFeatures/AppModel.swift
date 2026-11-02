@@ -84,6 +84,8 @@ public final class AppModel {
     public var quickSwitcherOpen = false
     public var settings = AppSettings()
     public var updateAvailable: UpdateInfo?
+    /// Whether Asiri is the frontmost app ("hide chats when Asiri isn't in front", auto-lock).
+    public var isActive = true
     public var pairingCompleted: (chat: ChatID, user: UserID)?
 
     @ObservationIgnored public private(set) var conversations: [ChatID: ConversationModel] = [:]
@@ -92,6 +94,7 @@ public final class AppModel {
     @ObservationIgnored private var typingExpiry: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored public var onPanicWipe: (() -> Void)?
+    @ObservationIgnored private var inactiveSince: Date?
 
     public init(core: CoreService, prefs: Preferences = .shared) {
         self.core = core
@@ -381,8 +384,28 @@ public final class AppModel {
 
     // MARK: Lock and wipe
 
+    /// Asiri went to the background.
+    public func didResignActive(at now: Date = Date()) {
+        isActive = false
+        inactiveSince = now
+    }
+
+    /// Asiri came back to the front: lock first if it was away longer than the auto-lock time
+    /// (Settings › Security), so nothing shows before the lock screen.
+    public func didBecomeActive(at now: Date = Date()) {
+        defer { inactiveSince = nil }
+        if let since = inactiveSince, prefs.autoLockMinutes > 0,
+           now.timeIntervalSince(since) >= Double(prefs.autoLockMinutes) * 60 {
+            lock()
+        }
+        isActive = true
+    }
+
+    /// Whether there's anything to lock with: app lock or a PIN.
+    public var canLock: Bool { prefs.appLockEnabled || PINStore().hasPIN }
+
     public func lock() {
-        guard prefs.appLockEnabled || PINStore().hasPIN else { return }
+        guard canLock, phase == .ready else { return }
         phase = .locked
     }
 

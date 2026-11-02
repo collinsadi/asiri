@@ -201,3 +201,39 @@ final class ImagingTests: XCTestCase {
         XCTAssertNil(props[kCGImagePropertyGPSDictionary], "the location survived")
     }
 }
+
+@MainActor
+final class LockingTests: XCTestCase {
+    func testAutoLockAfterTheChosenTimeInTheBackground() {
+        let prefs = Preferences.ephemeral()
+        prefs.appLockEnabled = true
+        prefs.autoLockMinutes = 5
+        let app = AppModel(core: PreviewCore(simulateNetwork: false), prefs: prefs)
+        app.start()
+        let start = Date()
+
+        app.didResignActive(at: start)
+        XCTAssertFalse(app.isActive)
+        app.didBecomeActive(at: start.addingTimeInterval(60))
+        XCTAssertEqual(app.phase, .ready, "a minute away doesn't lock")
+        XCTAssertTrue(app.isActive)
+
+        app.didResignActive(at: start)
+        app.didBecomeActive(at: start.addingTimeInterval(301))
+        XCTAssertEqual(app.phase, .locked, "five minutes away locks before anything shows")
+        app.unlocked()
+        XCTAssertEqual(app.phase, .ready)
+    }
+
+    func testNothingLocksWithoutALockMethod() throws {
+        try XCTSkipIf(PINStore().hasPIN, "this Mac has an Asiri PIN set")
+        let prefs = Preferences.ephemeral()
+        prefs.autoLockMinutes = 1
+        let app = AppModel(core: PreviewCore(simulateNetwork: false), prefs: prefs)
+        app.start()
+        let start = Date()
+        app.didResignActive(at: start)
+        app.didBecomeActive(at: start.addingTimeInterval(3600))
+        XCTAssertEqual(app.phase, .ready)
+    }
+}

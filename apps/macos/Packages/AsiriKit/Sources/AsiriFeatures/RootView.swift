@@ -27,7 +27,14 @@ public struct RootView: View {
                     .transition(.opacity)
             }
         }
+        .overlay {
+            if app.prefs.hideWhenInactive, !app.isActive, app.phase == .ready {
+                PrivacyCover()
+                    .transition(.opacity)
+            }
+        }
         .animation(Motion.standard, value: app.phase)
+        .animation(Motion.quick, value: app.isActive)
         .environment(\.textScale, app.prefs.textScale)
         .frame(minWidth: 780, minHeight: 520)
     }
@@ -101,6 +108,22 @@ struct LaunchView: View {
                     mark.shadow(color: Palette.indigoBright.opacity(glow ? 0.8 : 0.2), radius: glow ? 30 : 8)
                 } animation: { _ in .easeInOut(duration: 1.4) }
         }
+    }
+}
+
+/// Covers the window while Asiri isn't the frontmost app, when the user asked for that.
+struct PrivacyCover: View {
+    var body: some View {
+        ZStack {
+            Palette.night
+            VStack(spacing: 14) {
+                AsiriMark(size: 72)
+                Text("Hidden while you're in another app")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 

@@ -3,39 +3,50 @@ import AsiriDesign
 import AsiriDomain
 import SwiftUI
 
-/// Menu-bar commands and keyboard shortcuts (§13.4).
+/// Menu-bar commands and keyboard shortcuts (§13.4). `app` is `nil` until the database is open,
+/// and the commands stay disabled until then.
 public struct AsiriCommands: Commands {
-    let app: AppModel
+    let app: AppModel?
 
-    public init(app: AppModel) {
+    public init(app: AppModel?) {
         self.app = app
     }
 
+    private var ready: Bool { app?.phase == .ready }
+
     public var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Chat") { app.sheet = .newChat }
+            Button("New Chat") { app?.sheet = .newChat }
                 .keyboardShortcut("n")
-            Button("New Group") { app.sheet = .newGroup }
+                .disabled(!ready)
+            Button("New Group") { app?.sheet = .newGroup }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-            Button("Add a Friend in Person…") { app.sheet = .addFriend }
+                .disabled(!ready)
+            Button("Add a Friend in Person…") { app?.sheet = .addFriend }
+                .disabled(!ready)
         }
         CommandMenu("Chat") {
-            Button("Quick Switcher and Search") { app.quickSwitcherOpen = true }
+            Button("Quick Switcher and Search") { app?.quickSwitcherOpen = true }
                 .keyboardShortcut("k")
+                .disabled(!ready)
             Divider()
-            Button("Next Chat") { app.selectNext(true) }
+            Button("Next Chat") { app?.selectNext(true) }
                 .keyboardShortcut(.tab, modifiers: [.control])
-            Button("Previous Chat") { app.selectNext(false) }
+                .disabled(!ready)
+            Button("Previous Chat") { app?.selectNext(false) }
                 .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                .disabled(!ready)
             Divider()
-            Button(app.showDetails ? "Hide Details" : "Show Details") {
+            Button(app?.showDetails == false ? "Show Details" : "Hide Details") {
+                guard let app else { return }
                 withAnimation(Motion.standard) { app.showDetails.toggle() }
             }
             .keyboardShortcut("i", modifiers: [.command, .option])
+            .disabled(!ready)
             Divider()
-            Button("Lock Asiri") { app.lock() }
+            Button("Lock Asiri") { app?.lock() }
                 .keyboardShortcut("l")
-                .disabled(!app.prefs.appLockEnabled)
+                .disabled(!(ready && (app?.canLock ?? false)))
         }
     }
 }
@@ -85,7 +96,7 @@ public struct MenuBarView: View {
             HStack {
                 Button("Open Asiri", action: openMain)
                 Spacer()
-                if app.prefs.appLockEnabled {
+                if app.canLock {
                     Button("Lock") { app.lock() }
                 }
                 Button("Quit") { NSApp.terminate(nil) }
