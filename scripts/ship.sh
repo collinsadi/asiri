@@ -15,8 +15,9 @@
 #    ./scripts/ship.sh --universal      build the core for Apple silicon and Intel
 #
 #  Output: build/Asiri.app, and build/snapshots/ with a PNG of every screen.
-#  Signing: uses your "Developer ID Application" or "Apple Development" identity when the
-#  keychain has one (Hardened Runtime on); otherwise signs ad hoc for this Mac only.
+#  Signing: your "Developer ID Application" or "Apple Development" certificate when the
+#  keychain has one (Hardened Runtime on; macOS may ask once to let codesign use it);
+#  otherwise ad hoc, for this Mac only. ASIRI_SIGN_IDENTITY=- always signs ad hoc.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -100,38 +101,11 @@ if ! $quick; then
 fi
 
 # ── The app ──────────────────────────────────────────────────────────────────
-step "Generating the Xcode project"
-(cd apps/macos && xcodegen generate --quiet)
-
-identity="$(security find-identity -v -p codesigning 2>/dev/null \
-  | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
-[ -n "$identity" ] || identity="$(security find-identity -v -p codesigning 2>/dev/null \
-  | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)"
-signing=()
-if [ -n "$identity" ]; then
-  team="$(security find-certificate -c "$identity" -p 2>/dev/null | openssl x509 -noout -subject 2>/dev/null \
-    | sed -n 's/.*OU *= *\([A-Z0-9]\{10\}\).*/\1/p')"
-  signing=(CODE_SIGN_IDENTITY="$identity" DEVELOPMENT_TEAM="${team:-}" ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS=--timestamp=none)
-  echo "Signing as: $identity"
-else
-  # Library validation (part of the Hardened Runtime) refuses ad-hoc-signed frameworks, so an
-  # ad-hoc build for this Mac runs without it. Release builds are signed and notarized (§16.1).
-  signing=(CODE_SIGN_IDENTITY=- ENABLE_HARDENED_RUNTIME=NO)
-  echo "No signing identity in the keychain: signing ad hoc (runs on this Mac only)"
-fi
-
+# The same script CI builds the app with: the core's architectures, and one signing style
+# for every target (see tools/release/build-app.sh).
 step "Building Asiri.app (Release)"
-log="build/xcodebuild.log"
-if ! xcodebuild -project apps/macos/Asiri.xcodeproj -scheme Asiri -configuration Release \
-  -destination 'platform=macOS' -derivedDataPath build/DerivedData \
-  -skipPackagePluginValidation -skipMacroValidation "${signing[@]}" build >"$log" 2>&1; then
-  grep -E "error:|Undefined symbol|ld: " "$log" | head -40 >&2 || true
-  die "The app didn't build; the full log is in $log"
-fi
-rm -rf build/Asiri.app
-ditto build/DerivedData/Build/Products/Release/Asiri.app build/Asiri.app
-codesign --verify --deep --strict build/Asiri.app 2>/dev/null && ok "build/Asiri.app is built and its signature checks out" \
-  || ok "build/Asiri.app is built"
+tools/release/build-app.sh --out build
+ok "build/Asiri.app"
 
 if $install; then
   step "Installing into /Applications"
