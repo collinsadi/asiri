@@ -211,7 +211,19 @@ struct JoinFlow: View {
             } else {
                 OnboardingTitle("Show this to your friend", "They choose “Add a friend” in Asiri and scan it. Then you scan the code they show back.")
                 HStack(alignment: .center, spacing: 22) {
-                    if !offer.isEmpty { QRCodeView(code: offer, size: 210) }
+                    if !offer.isEmpty {
+                        VStack(spacing: 8) {
+                            QRCodeView(code: offer, size: 210)
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(offer, forType: .string)
+                                app.show(.info, "Copied. Only send it through a channel you trust.")
+                            } label: {
+                                Label("Copy my code", systemImage: "doc.on.doc")
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                    }
                     VStack(spacing: 10) {
                         if scanning {
                             ScannerPanel { code in redeem(code) }
