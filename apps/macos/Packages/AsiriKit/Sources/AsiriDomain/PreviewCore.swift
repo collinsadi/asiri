@@ -268,18 +268,18 @@ public final class PreviewCore: CoreService, @unchecked Sendable {
     public func search(_ query: String, limit: Int) throws -> [SearchHit] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return [] }
-        return locked {
-            messagesByChat.values.flatMap { $0 }
-                .filter { ($0.kind == .text || $0.kind == .attachment) && !$0.isDeleted && $0.body.lowercased().contains(q) }
-                .sorted { $0.sentAt > $1.sentAt }
-                .prefix(limit)
-                .map { m in
-                    var snippet = m.body
-                    if let r = snippet.range(of: q, options: .caseInsensitive) {
-                        snippet.replaceSubrange(r, with: "[\(snippet[r])]")
-                    }
-                    return SearchHit(chatID: m.chatID, messageID: m.id, snippet: snippet, sentAt: m.sentAt)
-                }
+        let all: [ChatMessage] = locked { messagesByChat.values.flatMap { $0 } }
+        let matches = all.filter { (m: ChatMessage) -> Bool in
+            let searchable = m.kind == .text || m.kind == .attachment
+            return searchable && !m.isDeleted && m.body.lowercased().contains(q)
+        }
+        let newest = matches.sorted { (a: ChatMessage, b: ChatMessage) -> Bool in a.sentAt > b.sentAt }
+        return newest.prefix(limit).map { (m: ChatMessage) -> SearchHit in
+            var snippet = m.body
+            if let r = snippet.range(of: q, options: .caseInsensitive) {
+                snippet.replaceSubrange(r, with: "[\(snippet[r])]")
+            }
+            return SearchHit(chatID: m.chatID, messageID: m.id, snippet: snippet, sentAt: m.sentAt)
         }
     }
 
