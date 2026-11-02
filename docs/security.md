@@ -12,6 +12,11 @@ what is checked on every push. For reporting a vulnerability, see [SECURITY.md](
 | End to end | `tools/asiri-sim/tests` | Real engines with their own encrypted stores talking to a real relay: pairing, DMs, groups, attachments, calls, offline delivery, restarts |
 | Malicious relay | `tools/asiri-sim/tests/evil_relay.rs` | A proxy in front of the relay duplicates, replays, tampers with, drops, reorders, fabricates and withholds envelopes |
 | LiveKit | `tools/asiri-sim/tests/livekit.rs` | Relay-minted tokens join the pinned LiveKit server through the call bridge; forged tokens are refused |
+| Call identities | `tools/asiri-sim/tests/media_calls.rs` | LiveKit only sees random aliases; MLS-authenticated call signals map them to people, first claim wins |
+| Test buddy | `tools/asiri-sim/tests/buddy.rs` | A headless friend pairs like a new Mac and exchanges texts, reactions and files, and declines calls |
+| Release signing | `tools/asiri-release` | Manifests verify only with the release key; a changed manifest or disk image is refused |
+| Mac app | `.github/workflows/macos.yml` | The Swift packages build and pass their tests, every screen renders in light and dark mode, and the app builds with the core and LiveKit, then launches |
+| Icon | `tools/design/make-icon.py --check` | The committed icon matches its generator |
 | Dependency policy | `cargo deny check` | Known vulnerabilities, licenses, sources and banned crates |
 | Deployment kit | `server/deploy/check.sh` | Firewall, Tor and LiveKit configuration, scripts, the relay image |
 | Commit rules | `scripts/ci/check-commits.sh` | Conventional Commits, no AI attribution |
