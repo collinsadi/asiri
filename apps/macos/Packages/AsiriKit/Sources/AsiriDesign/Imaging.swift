@@ -58,7 +58,8 @@ public struct QRCodeView: View {
 
 // MARK: - The mark
 
-/// Asiri's mark: a speech bubble whose tail forms a keyhole, on deep indigo.
+/// Asiri's mark, as on the app icon: a round speech bubble whose tail is a keyhole's slot, with
+/// three "typing" dots cut through it, on deep indigo (§13.8).
 public struct AsiriMark: View {
     let size: CGFloat
 
@@ -69,55 +70,60 @@ public struct AsiriMark: View {
     public var body: some View {
         ZStack {
             Circle()
-                .fill(LinearGradient(colors: [Color(hex: 0x6366F1), Color(hex: 0x3730A3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [Color(hex: 0x5A51F2), Color(hex: 0x3B32C4), Color(hex: 0x1F1873)],
+                                     startPoint: .top, endPoint: .bottom))
+            Circle()
+                .fill(RadialGradient(colors: [Color(hex: 0xA9A4FF).opacity(0.5), .clear], center: .top,
+                                     startRadius: 0, endRadius: size * 0.75))
             KeyholeBubble()
-                .fill(Color.white)
-                .padding(size * 0.2)
-            Keyhole()
-                .fill(Color(hex: 0x3F37C9))
-                .frame(width: size * 0.17, height: size * 0.3)
-                .offset(y: -size * 0.035)
+                .fill(LinearGradient(colors: [Color.white, Color(hex: 0xE3E1FF)], startPoint: .top, endPoint: .bottom),
+                      style: FillStyle(eoFill: true))
+                .shadow(color: Color(hex: 0x0B0830).opacity(0.35), radius: size * 0.03, y: size * 0.02)
+                .frame(width: size * 0.47, height: size * 0.6)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 }
 
-/// A rounded bubble whose tail drops from the bottom center.
+/// The bubble from the icon, fitted to the rect: a round head (the keyhole's), a slot that
+/// flares down from it (the bubble's tail), and three dots cut out with even-odd filling.
+/// Same proportions as tools/design/make-icon.py: head radius 238, slot half-widths 94 and 138,
+/// foot at 602 below the head's top, foot corners 46, dots of 39 every 114.
 public struct KeyholeBubble: Shape {
     public init() {}
 
     public func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let h = rect.height
-        let bodyH = h * 0.8
-        var p = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY, width: w, height: bodyH), cornerRadius: w * 0.3, style: .continuous)
-        var tail = Path()
-        tail.move(to: CGPoint(x: rect.midX - w * 0.12, y: rect.minY + bodyH - 1))
-        tail.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        tail.addLine(to: CGPoint(x: rect.midX + w * 0.12, y: rect.minY + bodyH - 1))
-        tail.closeSubpath()
-        p.addPath(tail)
-        return p
-    }
-}
+        let width: CGFloat = 476, height: CGFloat = 602
+        let s = min(rect.width / width, rect.height / height)
+        let ox = rect.midX - width * s / 2
+        let oy = rect.midY - height * s / 2
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
 
-/// A classic keyhole: a circle over a tapered slot.
-public struct Keyhole: Shape {
-    public init() {}
+        let r: CGFloat = 238, cx: CGFloat = 238, cy: CGFloat = 238
+        let head = Path(ellipseIn: CGRect(x: ox, y: oy, width: 2 * r * s, height: 2 * r * s))
 
-    public func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let r = w / 2
-        var p = Path(ellipseIn: CGRect(x: rect.minX, y: rect.minY, width: w, height: w))
+        // The slot starts inside the head, so the union is one solid shape.
+        let top: CGFloat = 94, foot: CGFloat = 138, bottom: CGFloat = 602, corner: CGFloat = 46
+        let dx = foot - top, dy = bottom - cy
+        let len = (dx * dx + dy * dy).squareRoot()
+        let ux = dx / len, uy = dy / len
         var slot = Path()
-        slot.move(to: CGPoint(x: rect.midX - r * 0.42, y: rect.minY + r))
-        slot.addLine(to: CGPoint(x: rect.midX - r * 0.62, y: rect.maxY))
-        slot.addLine(to: CGPoint(x: rect.midX + r * 0.62, y: rect.maxY))
-        slot.addLine(to: CGPoint(x: rect.midX + r * 0.42, y: rect.minY + r))
+        slot.move(to: pt(cx - top, cy))
+        slot.addLine(to: pt(cx + top, cy))
+        slot.addLine(to: pt(cx + foot - ux * corner, bottom - uy * corner))
+        slot.addQuadCurve(to: pt(cx + foot - corner, bottom), control: pt(cx + foot, bottom))
+        slot.addLine(to: pt(cx - foot + corner, bottom))
+        slot.addQuadCurve(to: pt(cx - foot + ux * corner, bottom - uy * corner), control: pt(cx - foot, bottom))
         slot.closeSubpath()
-        p.addPath(slot)
-        return p
+
+        var bubble = head.union(slot)
+        let dot: CGFloat = 39, gap: CGFloat = 114
+        for i in -1 ... 1 {
+            let x = cx + CGFloat(i) * gap
+            bubble.addEllipse(in: CGRect(x: ox + (x - dot) * s, y: oy + (cy - dot) * s, width: 2 * dot * s, height: 2 * dot * s))
+        }
+        return bubble
     }
 }
 
