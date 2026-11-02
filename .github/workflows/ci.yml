@@ -1,0 +1,132 @@
+# Linux CI: the Rust workspace, the commit rules, dependency policy, the deployment kit and
+# calls against a real LiveKit server. The Mac app is built and tested in macos.yml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: short
+
+jobs:
+  rust:
+    name: Rust (format, lint, tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned in rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal -c rustfmt -c clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Clippy (core with Tor)
+        run: cargo clippy -p asiri-core --features tor --all-targets --locked -- -D warnings
+      - name: Tests (unit, relay protocol, simulator end to end)
+        run: cargo test --workspace --locked
+      - name: Generated protobuf code is up to date
+        run: |
+          cargo run -q -p proto-gen --locked
+          git diff --exit-code -- core/asiri-proto/src/gen
+
+  commits:
+    name: Commit rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every new commit follows CONTRIBUTING.md
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: scripts/ci/check-commits.sh "${BASE:-0000000}" "$HEAD"
+      - name: Pull request description has no AI attribution
+        if: github.event_name == 'pull_request'
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n' "$BODY" | scripts/check-commit-message.sh
+
+  deny:
+    name: Dependency policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  deploy-kit:
+    name: Deployment kit and relay image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools the checks use
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq nftables tor shellcheck python3-yaml
+      - name: Validate the kit (firewall, Tor, LiveKit, compose, scripts)
+        run: sudo server/deploy/check.sh
+      - name: Build the relay image exactly as the server does
+        run: docker build -f server/deploy/relay.Dockerfile -t asiri-relay:ci .
+      - name: The image runs
+        run: |
+          docker run --rm asiri-relay:ci --version
+          docker run --rm asiri-relay:ci --help
+
+  livekit:
+    name: Calls against LiveKit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned in rust-toolchain.toml)
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: livekit
+      - name: Start LiveKit (the version the server runs)
+        run: |
+          image=$(grep -oE 'livekit/livekit-server:v[0-9.]+' server/deploy/docker-compose.yml)
+          cat > "$RUNNER_TEMP/livekit.yaml" <<'YAML'
+          port: 7880
+          bind_addresses: ["127.0.0.1"]
+          rtc:
+            tcp_port: 7881
+            udp_port: 7882
+            use_external_ip: false
+            node_ip: 127.0.0.1
+          keys:
+            APIsimulator: simulator-secret-0123456789abcdefghijklmnop
+          logging:
+            level: info
+          YAML
+          docker run -d --name livekit --network host \
+            -v "$RUNNER_TEMP/livekit.yaml:/etc/livekit.yaml:ro" "$image" --config /etc/livekit.yaml
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:7880/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7880/ && echo " ← LiveKit is up ($image)"
+      - name: Relay tokens join LiveKit through the call bridge
+        env:
+          ASIRI_LIVEKIT: "1"
+        run: cargo test -p asiri-sim --test livekit --locked -- --nocapture
+      - name: LiveKit logs
+        if: failure()
+        run: docker logs livekit 2>&1 | tail -200
