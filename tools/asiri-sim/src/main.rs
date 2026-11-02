@@ -100,7 +100,9 @@ async fn relay(
     println!("Asiri development relay listening on {addr} (no Tor: development only)");
     println!("Data: {}", dir.display());
     println!();
-    println!("First admin: in Asiri choose “Set up a server” → “Paste a code” and paste:");
+    println!(
+        "First admin: in Asiri choose “Set up a server”, then paste this under “Enter the server's code”:"
+    );
     println!();
     println!("{}", asiri_relay::admin::invitation_text(invitation));
     println!();
