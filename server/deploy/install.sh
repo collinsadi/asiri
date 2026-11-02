@@ -4,7 +4,7 @@
 #
 #   sudo bash install.sh [--public-ip IP] [--lockdown]
 #
-# Installs and configures, on Debian 13 or Ubuntu 24.04:
+# Installs and configures, on Debian 13, Ubuntu 24.04 or Ubuntu 26.04:
 #   * tor (Tor Project repository) with two onion services in restricted-discovery mode:
 #     "asiri" (relay :80 → 127.0.0.1:8080, call signaling :7880 → 127.0.0.1:7880) and
 #     "admin" (SSH :22 → 127.0.0.1:22)
@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --lockdown) LOCKDOWN=1 ;;
     --public-ip) PUBLIC_IP="${2:?--public-ip needs an address}"; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift

@@ -14,7 +14,7 @@
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 
