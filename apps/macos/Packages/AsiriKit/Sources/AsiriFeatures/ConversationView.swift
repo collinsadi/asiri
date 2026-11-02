@@ -84,7 +84,14 @@ struct ConversationView: View {
             .defaultScrollAnchor(.bottom)
             .scrollContentBackground(.hidden)
             .onAppear {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                // Open at the first unread message, like Telegram, or at the newest one. Lazy
+                // rows settle their heights after the first pass, so aim again once they have.
+                let opening = model.rows.contains { $0.id == "unread" } ? ("unread", UnitPoint.top) : ("bottom", UnitPoint.bottom)
+                proxy.scrollTo(opening.0, anchor: opening.1)
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(80))
+                    proxy.scrollTo(opening.0, anchor: opening.1)
+                }
             }
             .onChange(of: model.sentCounter) {
                 withAnimation(Motion.standard) { proxy.scrollTo("bottom", anchor: .bottom) }
@@ -169,6 +176,8 @@ struct ConversationHeader: View {
                         if model.isTyping { TypingDots().scaleEffect(0.8) }
                         Text(model.subtitle)
                             .font(.system(size: 11.5))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                             .foregroundStyle(model.isTyping ? Palette.accent : (chat.verification == .changed ? Palette.danger : Color.secondary))
                             .contentTransition(.opacity)
                     }
