@@ -16,8 +16,12 @@ struct ChatListView: View {
             } else {
                 list
             }
+            if let update = app.updateAvailable, !update.isRequired {
+                UpdateBanner(app: app, update: update)
+            }
             footer
         }
+        .animation(Motion.standard, value: app.updateAvailable)
         .background(Palette.sidebar)
     }
 

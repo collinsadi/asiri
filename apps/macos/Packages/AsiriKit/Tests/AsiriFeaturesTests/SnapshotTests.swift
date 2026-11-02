@@ -132,6 +132,22 @@ final class SnapshotTests: XCTestCase {
         try snapshot("12-empty", size: CGSize(width: 1100, height: 700)) { MainView(app: app) }
     }
 
+    func testStartupAndUpdates() throws {
+        try snapshot("14-locked", size: CGSize(width: 900, height: 600)) {
+            StartupView(state: .locked, retry: {}, startOver: {})
+        }
+        try snapshot("15-open-failed", size: CGSize(width: 900, height: 600)) {
+            StartupView(state: .failed("The key that protects your messages is missing. Asiri can't open them on this Mac."),
+                        retry: {}, startOver: {})
+        }
+        let app = app()
+        app.updateAvailable = UpdateInfo(version: "1.1.0", build: 12, notes: "Group calls show who is speaking.", size: 48_000_000, isRequired: false)
+        try snapshot("16-update-available", size: CGSize(width: 1100, height: 700)) { MainView(app: app) }
+        let blocked = self.app()
+        blocked.updateAvailable = UpdateInfo(version: "1.2.0", build: 20, notes: "Security fixes.", size: 48_000_000, isRequired: true)
+        try snapshot("17-update-required", size: CGSize(width: 900, height: 600)) { RootView(app: blocked) }
+    }
+
     func testDesignSystem() throws {
         try snapshot("13-components", size: CGSize(width: 640, height: 460)) {
             VStack(alignment: .leading, spacing: 18) {

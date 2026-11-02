@@ -84,6 +84,7 @@ public final class AppModel {
     public var quickSwitcherOpen = false
     public var settings = AppSettings()
     public var updateAvailable: UpdateInfo?
+    public var installingUpdate = false
     /// Whether Asiri is the frontmost app ("hide chats when Asiri isn't in front", auto-lock).
     public var isActive = true
     public var pairingCompleted: (chat: ChatID, user: UserID)?
@@ -380,6 +381,23 @@ public final class AppModel {
         guard let call = activeCall else { return }
         activeCall = nil
         perform { try self.core.endCall(call.callID) }
+    }
+
+    // MARK: Updates
+
+    /// Downloads the update (over the relay, hash-checked against the signed manifest by the
+    /// core) and opens the disk image, so the user drags the new Asiri into Applications (§16.2).
+    public func installUpdate() async {
+        guard !installingUpdate else { return }
+        installingUpdate = true
+        defer { installingUpdate = false }
+        do {
+            let image = try await core.downloadUpdate()
+            NSWorkspace.shared.open(image)
+            show(.success, "Drag Asiri into Applications to finish updating")
+        } catch {
+            show(error)
+        }
     }
 
     // MARK: Lock and wipe

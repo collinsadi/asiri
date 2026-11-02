@@ -341,8 +341,22 @@ struct AboutSettings: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             if let update = app.updateAvailable {
-                Label("Asiri \(update.version) is available", systemImage: "arrow.down.circle.fill")
-                    .foregroundStyle(Palette.accent)
+                VStack(spacing: 8) {
+                    Label("Asiri \(update.version) is available", systemImage: "arrow.down.circle.fill")
+                        .foregroundStyle(Palette.accent)
+                    if !update.notes.isEmpty {
+                        Text(update.notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 380)
+                    }
+                    Button(app.installingUpdate ? "Downloading…" : "Install Update") {
+                        Task { await app.installUpdate() }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(app.installingUpdate)
+                }
             }
             Button {
                 checking = true

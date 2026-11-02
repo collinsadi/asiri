@@ -23,8 +23,13 @@ public struct RootView: View {
                 LockView(app: app)
                     .transition(.opacity)
             case .ready:
-                MainView(app: app)
-                    .transition(.opacity)
+                if let update = app.updateAvailable, update.isRequired {
+                    RequiredUpdateView(app: app, update: update)
+                        .transition(.opacity)
+                } else {
+                    MainView(app: app)
+                        .transition(.opacity)
+                }
             }
         }
         .overlay {
