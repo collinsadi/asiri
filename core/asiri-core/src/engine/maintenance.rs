@@ -38,6 +38,8 @@ const SELF_UPDATE_EVERY_MS: i64 = 7 * DAY_MS;
 const SELF_UPDATES_PER_PASS: usize = 3;
 /// After sleeping this long, self-update everywhere at the next chance (§7.3).
 pub const LONG_SLEEP_S: u64 = 6 * 3600;
+/// Messages waiting for an epoch that never comes are dropped after this long.
+const DEFERRED_RETENTION_MS: i64 = DAY_MS;
 /// Remember processed envelope IDs a little longer than the relay keeps envelopes (30 days).
 const PROCESSED_RETENTION_MS: i64 = 31 * DAY_MS;
 /// A ring nobody answered or cancelled is over after this long.
@@ -86,12 +88,14 @@ impl Core {
     fn local_pass(&self, n: u64) -> CoreResult<()> {
         self.purge_expired()?;
         self.report_gaps()?;
+        self.report_stuck_groups()?;
         self.expire_rings()?;
         if n.is_multiple_of(720) {
             // about once an hour
-            self.inner
-                .store
-                .tx(|c| store::prune_processed(c, now_ms() - PROCESSED_RETENTION_MS))?;
+            self.inner.store.tx(|c| {
+                store::prune_processed(c, now_ms() - PROCESSED_RETENTION_MS)?;
+                store::prune_deferred(c, now_ms() - DEFERRED_RETENTION_MS)
+            })?;
         }
         Ok(())
     }
@@ -143,6 +147,32 @@ impl Core {
         if !events.is_empty() {
             events.push(CoreEvent::ChatsChanged);
         }
+        self.emit_all(events);
+        Ok(())
+    }
+
+    /// Tells the chat when messages have been waiting for a group change that never arrived:
+    /// the relay withheld a commit, so this device can't follow the group any more (§18).
+    fn report_stuck_groups(&self) -> CoreResult<()> {
+        let id = self.inner.identity.read().map_err(lock_err)?;
+        let Ok(reg) = id.registered() else {
+            return Ok(());
+        };
+        let device = reg.device_id;
+        let mut events = Vec::new();
+        self.inner.store.tx(|c| {
+            for chat_id in store::take_stuck_groups(c, now_ms() - self.inner.config.gap_grace_ms)? {
+                let text = "Some messages in this chat can't be read: a change to the group never \
+                            arrived. If this lasts, ask an admin to remove you and add you again.";
+                self.system_message(c, &chat_id, (&id.user_id, &device), text, &mut events)?;
+                events.push(CoreEvent::SecurityWarning {
+                    chat_id: Some(chat_id),
+                    text: "A chat is out of sync; the server may be withholding messages.".into(),
+                });
+            }
+            Ok(())
+        })?;
+        drop(id);
         self.emit_all(events);
         Ok(())
     }

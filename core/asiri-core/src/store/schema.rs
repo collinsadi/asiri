@@ -146,7 +146,8 @@ CREATE TABLE deferred_envelopes (
   epoch       INTEGER NOT NULL,
   kind        INTEGER NOT NULL,
   payload     BLOB NOT NULL,
-  received_ms INTEGER NOT NULL
+  received_ms INTEGER NOT NULL,
+  reported    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX deferred_envelopes_group ON deferred_envelopes(group_id, epoch, id);
 

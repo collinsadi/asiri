@@ -978,6 +978,24 @@ pub fn take_due_deferred(
     Ok(Some((kind, payload)))
 }
 
+/// Groups whose deferred messages have waited since before `older_than_ms` without becoming
+/// due, not reported yet. Marks them reported.
+pub fn take_stuck_groups(conn: &Connection, older_than_ms: i64) -> CoreResult<Vec<Vec<u8>>> {
+    let groups: Vec<Vec<u8>> = {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT d.group_id FROM deferred_envelopes d JOIN chats c ON c.chat_id = d.group_id
+             WHERE d.reported = 0 AND d.received_ms < ?1 AND c.left_chat = 0",
+        )?;
+        stmt.query_map(params![older_than_ms], |r| r.get(0))?
+            .collect::<Result<_, _>>()?
+    };
+    conn.execute(
+        "UPDATE deferred_envelopes SET reported = 1 WHERE reported = 0 AND received_ms < ?1",
+        params![older_than_ms],
+    )?;
+    Ok(groups)
+}
+
 /// Forgets deferred messages that never became due.
 pub fn prune_deferred(conn: &Connection, before_ms: i64) -> CoreResult<()> {
     conn.execute(
