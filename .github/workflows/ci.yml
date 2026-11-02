@@ -62,6 +62,17 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
         run: printf '%s\n' "$BODY" | scripts/check-commit-message.sh
 
+  design:
+    name: Icon sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: librsvg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+      - name: The icon matches tools/design/make-icon.py
+        run: tools/design/make-icon.py --check
+
   deny:
     name: Dependency policy
     runs-on: ubuntu-24.04

@@ -1,0 +1,109 @@
+# The Mac app: AsiriKit's tests with a snapshot of every screen (kept as the `ci-snapshots`
+# artifact), and the full app — Rust core, Swift bridge, LiveKit calls — built and launched.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  kit:
+    name: AsiriKit (tests and snapshots)
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: xcodebuild -version && swift --version
+      - name: Build
+        working-directory: apps/macos/Packages/AsiriKit
+        run: |
+          set -o pipefail
+          swift build --build-tests 2>&1 | tee "$RUNNER_TEMP/kit-build.log"
+      - name: Tests and snapshots
+        working-directory: apps/macos/Packages/AsiriKit
+        env:
+          SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
+        run: swift test --skip-build
+      - name: Keep the snapshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-snapshots
+          path: |
+            ${{ runner.temp }}/snapshots
+            ${{ runner.temp }}/kit-build.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  app:
+    name: Asiri.app (core, bridge, calls)
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned in rust-toolchain.toml)
+        run: |
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+          xcodebuild -version
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-xcframework
+      - name: Rust core → AsiriCoreFFI.xcframework and Swift bindings
+        run: tools/release/build-xcframework.sh --debug --host-only
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen >/dev/null
+          cd apps/macos && xcodegen generate
+      - name: Build Asiri.app
+        run: |
+          set -o pipefail
+          xcodebuild -project apps/macos/Asiri.xcodeproj -scheme Asiri -configuration Debug \
+            -destination 'platform=macOS' -derivedDataPath "$RUNNER_TEMP/dd" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_IDENTITY=- ENABLE_HARDENED_RUNTIME=NO build 2>&1 \
+            | tee "$RUNNER_TEMP/app-build.log" \
+            | grep -E "error:|\*\* BUILD|Undefined symbol|ld: " || true
+          grep -q "\*\* BUILD SUCCEEDED \*\*" "$RUNNER_TEMP/app-build.log"
+      - name: The app launches, in demo mode and for real
+        run: |
+          app="$RUNNER_TEMP/dd/Build/Products/Debug/Asiri.app"
+          codesign --verify --verbose=2 "$app"
+          plutil -p "$app/Contents/Info.plist" | grep -E "CFBundleIdentifier|CFBundleIconName|NSCameraUsageDescription"
+          "$app/Contents/MacOS/Asiri" --demo > "$RUNNER_TEMP/demo.log" 2>&1 &
+          sleep 15
+          kill -0 $! && echo "demo mode is up"
+          screencapture -x "$RUNNER_TEMP/demo.png" || true
+          kill $! || true
+          ASIRI_LOG=info "$app/Contents/MacOS/Asiri" > "$RUNNER_TEMP/live.log" 2>&1 &
+          sleep 15
+          kill -0 $! && echo "the app with the real core is still running"
+          tail -20 "$RUNNER_TEMP/live.log" || true
+          screencapture -x "$RUNNER_TEMP/live.png" || true
+          kill $! || true
+      - name: Keep the build log and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-app
+          path: |
+            ${{ runner.temp }}/app-build.log
+            ${{ runner.temp }}/demo.log
+            ${{ runner.temp }}/live.log
+            ${{ runner.temp }}/demo.png
+            ${{ runner.temp }}/live.png
+          if-no-files-found: ignore
+          retention-days: 14
