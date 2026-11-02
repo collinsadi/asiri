@@ -1,0 +1,8 @@
+# The relay image builds from the Rust workspace only (server/deploy/relay.Dockerfile).
+.git
+target
+apps
+docs
+**/*.pem
+**/.env
+server/deploy/secrets
