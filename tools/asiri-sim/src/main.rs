@@ -3,6 +3,7 @@
 //! ```text
 //! asiri-sim relay [--listen 127.0.0.1:8080]   run a relay without Tor and print the admin code
 //! asiri-sim demo                              pair three people, chat in a DM and a group
+//! asiri-sim buddy [--name Ben] [--data DIR]   a headless friend to chat with from the app
 //! ```
 
 #![allow(clippy::print_stdout)]
@@ -48,6 +49,16 @@ enum Command {
     },
     /// Pair three people, then chat in a DM and a group, printing what each of them sees.
     Demo,
+    /// A headless friend to try Asiri with on one Mac: pair it from the app, then it answers
+    /// your messages, reacts, and downloads your files.
+    Buddy {
+        /// The name it shows.
+        #[arg(long, default_value = "Buddy")]
+        name: String,
+        /// Keep its keys and chats here, so it comes back as the same friend.
+        #[arg(long)]
+        data: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -65,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
             livekit,
         } => relay(listen, data, call_address, livekit).await,
         Command::Demo => demo().await,
+        Command::Buddy { name, data } => asiri_sim::buddy::run(&name, data).await,
     }
 }
 

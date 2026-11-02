@@ -4,6 +4,7 @@
 //! The end-to-end suites in `tests/` use it, and so does the `asiri-sim` command line for
 //! running a local development relay.
 
+pub mod buddy;
 pub mod evil;
 pub mod harness;
 

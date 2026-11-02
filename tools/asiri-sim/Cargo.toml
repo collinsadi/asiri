@@ -14,12 +14,16 @@ path = "src/lib.rs"
 name = "asiri-sim"
 path = "src/main.rs"
 
+[features]
+# Lets `asiri-sim buddy` join an onion relay (a real server) through embedded Tor.
+tor = ["asiri-core/tor"]
+
 [dependencies]
 asiri-core.workspace = true
 asiri-proto.workspace = true
 asiri-relay.workspace = true
 prost.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-std"] }
 tokio-tungstenite.workspace = true
 futures.workspace = true
 tempfile.workspace = true
