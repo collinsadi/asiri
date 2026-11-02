@@ -114,3 +114,13 @@ panic = "unwind"   # UniFFI turns Rust panics into Swift errors; aborting would 
 
 [profile.dev.package."*"]
 opt-level = 1      # keeps crypto-heavy dependencies usable in debug test runs
+
+# Build scripts and proc macros run only on the build machine, so never strip them. On macOS 27,
+# dyld refuses the proc-macro dylibs rustc strips when a deployment target is set ("mis-aligned
+# LINKEDIT string pool"), which rustc reports as E0463 "can't find crate". The XCFramework build
+# sets MACOSX_DEPLOYMENT_TARGET, so without this its release build fails on macOS 27.
+[profile.release.build-override]
+strip = false
+
+[profile.dev.build-override]
+strip = false
