@@ -28,11 +28,11 @@ while [ $# -gt 0 ]; do
     --min-build) min_build="$2"; shift 2 ;;
     --notes) notes="$2"; shift 2 ;;
     --notary-profile) profile="$2"; shift 2 ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
-[ -n "$version" ] && [ -n "$build" ] && [ -n "$key" ] || { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ -n "$version" ] && [ -n "$build" ] && [ -n "$key" ] || { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "--version must look like 1.2.0" >&2; exit 2; }
 [[ "$build" =~ ^[0-9]+$ ]] || { echo "--build must be a number" >&2; exit 2; }
 [ -f "$key" ] || { echo "release key not found: $key" >&2; exit 1; }

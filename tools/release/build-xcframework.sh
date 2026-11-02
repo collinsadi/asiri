@@ -29,7 +29,7 @@ for arg in "$@"; do
     --debug) profile=debug ;;
     --no-tor) features=(--no-default-features) ;;
     --host-only) targets=("$(rustc -vV | sed -n 's/^host: //p')") ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
