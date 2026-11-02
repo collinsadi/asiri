@@ -24,6 +24,8 @@ use crate::store::{self, Chat, ChatKind};
 
 const MAX_GROUP_MEMBERS: usize = 50;
 const COMMIT_ATTEMPTS: usize = 6;
+/// How long an unconfirmed commit keeps being re-sent across reconnects.
+const COMMIT_RESEND_WINDOW: Duration = Duration::from_secs(60);
 
 impl Core {
     /// Waits until the chat's epoch is beyond `epoch` (the winning commit has been applied).
@@ -78,21 +80,27 @@ impl Core {
             let Some((chat, out, recipients, welcome_to)) = prepared else {
                 return Ok(()); // nothing to commit
             };
-            let reply = client
-                .request(C::Send(wire::Send {
+            let welcome = out
+                .welcome
+                .as_ref()
+                .filter(|_| !welcome_to.is_empty())
+                .map(|w| wire::AttachedWelcome {
                     envelope_id: random_id().to_vec(),
-                    kind: PayloadKind::Commit as i32,
-                    group_route: chat.group_route.to_vec(),
-                    epoch: out.from_epoch,
-                    to_inboxes: recipients.iter().map(|r| r.to_vec()).collect(),
-                    payload: padding::pad_envelope(&out.commit),
-                    ttl_seconds: 0,
-                    welcome: None,
-                }))
-                .await;
-            let status = match reply {
-                Ok(S::SendResult(r)) => Status::try_from(r.status).unwrap_or(Status::Unspecified),
-                Ok(_) => Status::Unspecified,
+                    to_inboxes: welcome_to.iter().map(|r| r.to_vec()).collect(),
+                    payload: padding::pad_envelope(w),
+                });
+            let frame = wire::Send {
+                envelope_id: random_id().to_vec(),
+                kind: PayloadKind::Commit as i32,
+                group_route: chat.group_route.to_vec(),
+                epoch: out.from_epoch,
+                to_inboxes: recipients.iter().map(|r| r.to_vec()).collect(),
+                payload: padding::pad_envelope(&out.commit),
+                ttl_seconds: 0,
+                welcome,
+            };
+            let status = match self.send_commit(client, frame).await {
+                Ok(status) => status,
                 Err(e) => {
                     self.discard_pending(chat_id)?;
                     return Err(e);
@@ -102,25 +110,11 @@ impl Core {
                 Status::Accepted => {
                     self.inner.store.tx(|c| {
                         let mut group = self.inner.mls.load(c, chat_id)?;
-                        self.inner.mls.merge_pending(c, &mut group)?;
-                        if let Some(welcome) = &out.welcome
-                            && !welcome_to.is_empty()
-                        {
-                            store::enqueue(
-                                c,
-                                &random_id(),
-                                Some(chat_id),
-                                None,
-                                PayloadKind::Welcome as i32,
-                                &welcome_to,
-                                &padding::pad_envelope(welcome),
-                                0,
-                            )?;
-                        }
-                        Ok(())
+                        self.inner.mls.merge_pending(c, &mut group)
                     })?;
-                    self.wake_outbox();
                     self.rotate_call_keys(chat_id);
+                    self.follow_up(super::inbound::FollowUp::ReplayDeferred(chat_id.to_vec()));
+                    self.wake_outbox();
                     return Ok(());
                 }
                 Status::StaleEpoch => {
@@ -143,6 +137,33 @@ impl Core {
         Err(CoreError::Network(
             "Couldn't update the group; try again".into(),
         ))
+    }
+
+    /// Sends a commit for ordering. If the connection drops before the answer arrives, the
+    /// identical commit is sent again once reconnected: the relay recognizes it, so a commit
+    /// that won its epoch is never mistaken for one that lost (§9.5).
+    async fn send_commit(
+        &self,
+        mut client: std::sync::Arc<crate::net::relay::RelayClient>,
+        frame: wire::Send,
+    ) -> CoreResult<Status> {
+        let deadline = tokio::time::Instant::now() + COMMIT_RESEND_WINDOW;
+        loop {
+            match client.request(C::Send(frame.clone())).await {
+                Ok(S::SendResult(r)) => {
+                    return Ok(Status::try_from(r.status).unwrap_or(Status::Unspecified));
+                }
+                Ok(_) => return Ok(Status::Unspecified),
+                Err(e) if e.is_transient() && tokio::time::Instant::now() < deadline => {
+                    tracing::debug!("commit not confirmed yet ({e}); sending it again");
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    if let Ok(c) = self.client() {
+                        client = c;
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     fn discard_pending(&self, chat_id: &[u8]) -> CoreResult<()> {
@@ -399,17 +420,7 @@ impl Core {
             let id = self.inner.identity.read().map_err(lock_err)?;
             let device = id.registered()?.device_id;
             self.inner.store.tx(|c| {
-                let names: Vec<String> = new
-                    .iter()
-                    .map(|u| {
-                        store::contact(c, u)
-                            .ok()
-                            .flatten()
-                            .map(|ct| ct.display_name)
-                            .filter(|n| !n.is_empty())
-                            .unwrap_or_else(|| "Someone".into())
-                    })
-                    .collect();
+                let names: Vec<String> = new.iter().map(super::text::mention).collect();
                 self.system_message(
                     c,
                     chat_id,
@@ -473,15 +484,11 @@ impl Core {
             let id = self.inner.identity.read().map_err(lock_err)?;
             let device = id.registered()?.device_id;
             self.inner.store.tx(|c| {
-                let name = store::contact(c, &user)?
-                    .map(|ct| ct.display_name)
-                    .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| "Someone".into());
                 self.system_message(
                     c,
                     chat_id,
                     (&id.user_id, &device),
-                    &format!("You removed {name}"),
+                    &format!("You removed {}", super::text::mention(&user)),
                     &mut events,
                 )
             })?;
@@ -591,15 +598,34 @@ impl Core {
 
     /// Commits members' pending leave proposals (we're an admin and online).
     pub(crate) async fn commit_pending_proposals(&self, chat_id: &[u8]) -> CoreResult<()> {
+        // Who our commit removes, as of the attempt that was built last (the one accepted).
+        let departing = std::sync::Mutex::new(Vec::new());
         self.commit_op(chat_id, |c, id, group| {
-            Ok(self
+            let leaving = mls::pending_removals(group);
+            let out = self
                 .inner
                 .mls
-                .commit_pending_proposals(c, group, &id.signer)?
-                .map(|out| (out, vec![])))
+                .commit_pending_proposals(c, group, &id.signer)?;
+            *departing.lock().map_err(lock_err)? = if out.is_some() { leaving } else { Vec::new() };
+            Ok(out.map(|out| (out, vec![])))
         })
         .await?;
-        self.emit(CoreEvent::ChatUpdated(chat_id.to_vec()));
+        let departed = departing.into_inner().map_err(lock_err)?;
+        let mut events = Vec::new();
+        if !departed.is_empty() {
+            let id = self.inner.identity.read().map_err(lock_err)?;
+            let device = id.registered()?.device_id;
+            self.inner.store.tx(|c| {
+                let mut seen = std::collections::HashSet::new();
+                for m in departed.iter().filter(|m| seen.insert(m.user_id)) {
+                    let text = format!("{} left", super::text::mention(&m.user_id));
+                    self.system_message(c, chat_id, (&id.user_id, &device), &text, &mut events)?;
+                }
+                Ok(())
+            })?;
+        }
+        events.push(CoreEvent::ChatUpdated(chat_id.to_vec()));
+        self.emit_all(events);
         Ok(())
     }
 

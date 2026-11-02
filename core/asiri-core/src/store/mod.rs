@@ -919,6 +919,74 @@ pub fn prune_processed(conn: &Connection, before_ms: i64) -> CoreResult<()> {
     Ok(())
 }
 
+// ─── MLS messages from the future (architecture §12 "Ordering") ─────────────
+
+/// Most deferred messages kept per group; a hostile relay can't fill the disk with them.
+const MAX_DEFERRED_PER_GROUP: i64 = 1000;
+
+/// Keeps an MLS message for an epoch (or group) this device hasn't reached yet. Returns
+/// `false` when the group already has too many waiting.
+pub fn defer_envelope(
+    conn: &Connection,
+    group_id: &[u8],
+    epoch: u64,
+    kind: i32,
+    payload: &[u8],
+    now_ms: i64,
+) -> CoreResult<bool> {
+    let waiting: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM deferred_envelopes WHERE group_id = ?1",
+        params![group_id],
+        |r| r.get(0),
+    )?;
+    if waiting >= MAX_DEFERRED_PER_GROUP {
+        return Ok(false);
+    }
+    conn.execute(
+        "INSERT INTO deferred_envelopes(group_id, epoch, kind, payload, received_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            group_id,
+            i64::try_from(epoch).unwrap_or(i64::MAX),
+            kind,
+            payload,
+            now_ms
+        ],
+    )?;
+    Ok(true)
+}
+
+/// Removes and returns the oldest deferred message of `group_id` that is now due (its epoch is
+/// at most `epoch`): `(kind, payload)`.
+pub fn take_due_deferred(
+    conn: &Connection,
+    group_id: &[u8],
+    epoch: u64,
+) -> CoreResult<Option<(i32, Vec<u8>)>> {
+    let row: Option<(i64, i32, Vec<u8>)> = conn
+        .query_row(
+            "SELECT id, kind, payload FROM deferred_envelopes
+             WHERE group_id = ?1 AND epoch <= ?2 ORDER BY epoch, id LIMIT 1",
+            params![group_id, i64::try_from(epoch).unwrap_or(i64::MAX)],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let Some((id, kind, payload)) = row else {
+        return Ok(None);
+    };
+    conn.execute("DELETE FROM deferred_envelopes WHERE id = ?1", params![id])?;
+    Ok(Some((kind, payload)))
+}
+
+/// Forgets deferred messages that never became due.
+pub fn prune_deferred(conn: &Connection, before_ms: i64) -> CoreResult<()> {
+    conn.execute(
+        "DELETE FROM deferred_envelopes WHERE received_ms < ?1",
+        params![before_ms],
+    )?;
+    Ok(())
+}
+
 // ─── messages ───────────────────────────────────────────────────────────────
 
 /// A new message to store.

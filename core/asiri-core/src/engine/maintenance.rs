@@ -13,6 +13,7 @@ use std::time::Duration;
 use asiri_proto::relay::v1::{self as wire, client_frame::Body as C, server_frame::Body as S};
 use tokio::time::MissedTickBehavior;
 
+use super::text::mention;
 use super::{Core, CoreEvent, Inner, lock_err};
 use crate::error::{CoreError, CoreResult};
 use crate::ids::{Id16, now_ms, random_id};
@@ -37,8 +38,6 @@ const SELF_UPDATE_EVERY_MS: i64 = 7 * DAY_MS;
 const SELF_UPDATES_PER_PASS: usize = 3;
 /// After sleeping this long, self-update everywhere at the next chance (§7.3).
 pub const LONG_SLEEP_S: u64 = 6 * 3600;
-/// Missing messages get this long to arrive before the chat says so (§12).
-const GAP_GRACE_MS: i64 = 5 * 60_000;
 /// Remember processed envelope IDs a little longer than the relay keeps envelopes (30 days).
 const PROCESSED_RETENTION_MS: i64 = 31 * DAY_MS;
 /// A ring nobody answered or cancelled is over after this long.
@@ -86,11 +85,8 @@ impl Core {
     /// One local pass; `n` counts passes so slower chores run less often.
     fn local_pass(&self, n: u64) -> CoreResult<()> {
         self.purge_expired()?;
-        if n.is_multiple_of(12) {
-            // about once a minute
-            self.report_gaps()?;
-            self.expire_rings()?;
-        }
+        self.report_gaps()?;
+        self.expire_rings()?;
         if n.is_multiple_of(720) {
             // about once an hour
             self.inner
@@ -125,7 +121,9 @@ impl Core {
         }
         let mut events = Vec::new();
         self.inner.store.tx(|c| {
-            for (chat_id, device, _count) in store::take_overdue_gaps(c, now_ms() - GAP_GRACE_MS)? {
+            for (chat_id, device, _count) in
+                store::take_overdue_gaps(c, now_ms() - self.inner.config.gap_grace_ms)?
+            {
                 let Some(chat) = store::chat(c, &chat_id)? else {
                     continue;
                 };
@@ -133,13 +131,10 @@ impl Core {
                     continue;
                 }
                 let user = store::device(c, &device)?.map_or([0; 16], |d| d.user_id);
-                let name = self.name_of(c, &id, &user);
-                let name = if name == "Someone" {
-                    "someone".to_owned()
-                } else {
-                    name
-                };
-                let text = format!("Some messages from {name} may not have arrived.");
+                let text = format!(
+                    "Some messages from {} may not have arrived.",
+                    mention(&user)
+                );
                 self.system_message(c, &chat_id, (&user, &device), &text, &mut events)?;
             }
             Ok(())

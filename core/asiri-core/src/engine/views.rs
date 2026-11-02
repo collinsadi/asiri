@@ -58,6 +58,10 @@ pub struct Profile {
     pub direct_transport: bool,
     /// The onion client key for "Set up a server".
     pub onion_client_key: String,
+    /// Relay-assigned device ID, once registered.
+    pub device_id: Option<Id16>,
+    /// Relay-assigned inbox ID, once registered.
+    pub inbox_id: Option<Id16>,
 }
 
 /// The result of scanning someone's code in person.

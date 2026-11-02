@@ -138,6 +138,18 @@ CREATE TABLE processed_envelopes (
   at_ms       INTEGER NOT NULL
 );
 
+-- MLS messages from an epoch this device hasn't reached yet (or for a group it hasn't joined
+-- yet), kept until it gets there (architecture §12, ordering).
+CREATE TABLE deferred_envelopes (
+  id          INTEGER PRIMARY KEY,
+  group_id    BLOB NOT NULL,
+  epoch       INTEGER NOT NULL,
+  kind        INTEGER NOT NULL,
+  payload     BLOB NOT NULL,
+  received_ms INTEGER NOT NULL
+);
+CREATE INDEX deferred_envelopes_group ON deferred_envelopes(group_id, epoch, id);
+
 CREATE TABLE my_seqs (
   chat_id BLOB PRIMARY KEY,
   next    INTEGER NOT NULL

@@ -55,6 +55,9 @@ pub(super) fn check_commit(
         if !is_admin && info.user_id != sender.user_id && !proposed_by_removed {
             return Err(violation("only admins can remove other people"));
         }
+        if proposed_by_removed || info.device_id == sender.device_id {
+            summary.departed.push(info.device_id);
+        }
         summary.removed.push(info);
     }
 

@@ -16,6 +16,7 @@ mod maintenance;
 mod media;
 mod outbound;
 mod pairing;
+mod text;
 pub mod updater;
 pub mod views;
 
@@ -59,6 +60,9 @@ pub struct CoreConfig {
     pub release_public_key: Option<[u8; 32]>,
     /// This app's build number (for the updater).
     pub app_build: u32,
+    /// How long missing messages may take to arrive before the chat says so (§12). Tests
+    /// shorten it.
+    pub gap_grace_ms: i64,
 }
 
 impl CoreConfig {
@@ -70,6 +74,7 @@ impl CoreConfig {
             runtime: None,
             release_public_key: None,
             app_build: 0,
+            gap_grace_ms: 5 * 60_000,
         }
     }
 }
@@ -244,6 +249,8 @@ impl Core {
                 .as_ref()
                 .is_some_and(|r| r.endpoint.is_direct()),
             onion_client_key: id.onion_public_line(),
+            device_id: id.registration.as_ref().map(|r| r.device_id),
+            inbox_id: id.registration.as_ref().map(|r| r.inbox_id),
         })
     }
 
@@ -279,7 +286,8 @@ impl Core {
         me: &Id16,
         chat: store::Chat,
     ) -> CoreResult<ChatSummary> {
-        let last_message = store::last_message(conn, me, &chat.chat_id)?;
+        let last_message =
+            store::last_message(conn, me, &chat.chat_id)?.map(|m| Self::render(conn, me, m));
         let last_sender_name = match &last_message {
             Some(m) if !m.outgoing && chat.kind == ChatKind::Group => {
                 store::contact(conn, &m.sender_user)?.map(|c| c.display_name)
@@ -365,14 +373,21 @@ impl Core {
             Some(id) => store::message(&conn, &me, id)?.map(|m| (m.sort_ms, m.row_id)),
             None => None,
         };
-        store::messages(&conn, &me, chat_id, cursor, limit.min(500))
+        Ok(
+            store::messages(&conn, &me, chat_id, cursor, limit.min(500))?
+                .into_iter()
+                .map(|m| Self::render(&conn, &me, m))
+                .collect(),
+        )
     }
 
     /// One message.
     pub fn message(&self, message_id: &Id16) -> CoreResult<Message> {
         let me = self.user_id()?;
         let conn = self.inner.store.lock()?;
-        store::message(&conn, &me, message_id)?.ok_or(CoreError::NotFound)
+        store::message(&conn, &me, message_id)?
+            .map(|m| Self::render(&conn, &me, m))
+            .ok_or(CoreError::NotFound)
     }
 
     /// Members of a chat.

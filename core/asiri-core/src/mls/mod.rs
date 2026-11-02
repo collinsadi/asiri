@@ -218,6 +218,8 @@ pub struct CommitSummary {
     pub added: Vec<MemberInfo>,
     /// Members removed.
     pub removed: Vec<MemberInfo>,
+    /// Devices among `removed` that asked to leave (their own proposal was committed).
+    pub departed: Vec<Id16>,
     /// The local device was removed.
     pub self_removed: bool,
     /// The admin list or group metadata changed.
@@ -709,6 +711,19 @@ pub fn group_meta(group: &MlsGroup) -> Option<GroupMeta> {
 pub fn members(group: &MlsGroup) -> Vec<MemberInfo> {
     group
         .members()
+        .filter_map(|m| member_info(&m.credential, &m.signature_key, m.index.u32()).ok())
+        .collect()
+}
+
+/// Members that pending (stored) proposals would remove: people who asked to leave.
+#[must_use]
+pub fn pending_removals(group: &MlsGroup) -> Vec<MemberInfo> {
+    group
+        .pending_proposals()
+        .filter_map(|q| match q.proposal() {
+            Proposal::Remove(r) => group.member_at(r.removed()),
+            _ => None,
+        })
         .filter_map(|m| member_info(&m.credential, &m.signature_key, m.index.u32()).ok())
         .collect()
 }

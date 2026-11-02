@@ -12,6 +12,7 @@ use asiri_proto::app::v1::{
 use asiri_proto::relay::v1::{self as wire, PayloadKind};
 use rusqlite::Connection;
 
+use super::text::mention;
 use super::{CallInvite, Core, CoreEvent, lock_err};
 use crate::crypto::padding;
 use crate::error::{CoreError, CoreResult};
@@ -36,6 +37,8 @@ pub(crate) enum FollowUp {
     Delivered(Vec<u8>, Id16),
     /// The group's epoch changed: rotate keys of any call in this chat.
     RotateCallKeys(Vec<u8>),
+    /// The group's epoch changed: process messages that were waiting for it.
+    ReplayDeferred(Vec<u8>),
 }
 
 const MAX_TEXT: usize = 64 * 1024;
@@ -74,7 +77,7 @@ impl Core {
         }
     }
 
-    fn follow_up(&self, f: FollowUp) {
+    pub(crate) fn follow_up(&self, f: FollowUp) {
         let core = self.clone();
         match f {
             FollowUp::Download(message_id) => {
@@ -100,6 +103,13 @@ impl Core {
                 self.queue_delivered_receipt(chat_id, message_id)
             }
             FollowUp::RotateCallKeys(chat_id) => self.rotate_call_keys(&chat_id),
+            FollowUp::ReplayDeferred(group_id) => {
+                self.inner.rt.spawn_blocking(move || {
+                    if let Err(e) = core.replay_deferred(&group_id) {
+                        tracing::warn!("could not process waiting messages: {e}");
+                    }
+                });
+            }
         }
     }
 
@@ -112,34 +122,79 @@ impl Core {
                 return Ok(()); // a replay or duplicate (§18 malicious relay)
             }
             let payload = padding::unpad_envelope(&d.payload)?;
-            conn.execute_batch("SAVEPOINT envelope")?;
-            let outcome = match PayloadKind::try_from(d.kind) {
-                Ok(PayloadKind::Welcome) => {
-                    self.on_welcome(conn, &id, payload, &mut events, &mut follow)
+            self.apply_payload(conn, &id, d.kind, payload, &mut events, &mut follow)
+        })?;
+        Ok((events, follow))
+    }
+
+    /// Applies one MLS payload inside a savepoint: a message that fails to decrypt or breaks
+    /// the admin policy leaves no state behind and produces no events.
+    fn apply_payload(
+        &self,
+        conn: &Connection,
+        id: &Identity,
+        kind: i32,
+        payload: &[u8],
+        events: &mut Vec<CoreEvent>,
+        follow: &mut Vec<FollowUp>,
+    ) -> CoreResult<()> {
+        let mut ev = Vec::new();
+        let mut fu = Vec::new();
+        conn.execute_batch("SAVEPOINT envelope")?;
+        let outcome = match PayloadKind::try_from(kind) {
+            Ok(PayloadKind::Welcome) => self.on_welcome(conn, id, payload, &mut ev, &mut fu),
+            Ok(PayloadKind::Application | PayloadKind::Commit | PayloadKind::Proposal) => {
+                self.on_mls(conn, id, kind, payload, &mut ev, &mut fu)
+            }
+            _ => Ok(()),
+        };
+        match outcome {
+            Ok(()) => {
+                conn.execute_batch("RELEASE envelope")?;
+                events.append(&mut ev);
+                follow.append(&mut fu);
+            }
+            Err(e) => {
+                conn.execute_batch("ROLLBACK TO envelope; RELEASE envelope")?;
+                if let CoreError::NotAllowed(text) = &e {
+                    events.push(CoreEvent::SecurityWarning {
+                        chat_id: None,
+                        text: text.clone(),
+                    });
                 }
-                Ok(PayloadKind::Application | PayloadKind::Commit | PayloadKind::Proposal) => {
-                    self.on_mls(conn, &id, payload, &mut events, &mut follow)
-                }
-                _ => Ok(()),
-            };
-            match outcome {
-                Ok(()) => conn.execute_batch("RELEASE envelope")?,
-                Err(e) => {
-                    conn.execute_batch("ROLLBACK TO envelope; RELEASE envelope")?;
-                    events.clear();
-                    follow.clear();
-                    if let CoreError::NotAllowed(text) = &e {
-                        events.push(CoreEvent::SecurityWarning {
-                            chat_id: None,
-                            text: text.clone(),
-                        });
-                    }
-                    tracing::warn!("rejected an incoming message: {e}");
-                }
+                tracing::warn!("rejected an incoming message: {e}");
+            }
+        }
+        Ok(())
+    }
+
+    /// Processes deferred messages that became due after the group's epoch advanced.
+    pub(crate) fn replay_deferred(&self, group_id: &[u8]) -> CoreResult<()> {
+        let id = self.inner.identity.read().map_err(lock_err)?;
+        let mut events = Vec::new();
+        let mut follow = Vec::new();
+        self.inner.store.tx(|conn| {
+            // Bounded: each pass consumes a stored row.
+            for _ in 0..10_000 {
+                let epoch = match self.inner.mls.load(conn, group_id) {
+                    Ok(g) if store::chat(conn, group_id)?.is_some() => mls::epoch(&g),
+                    _ => return Ok(()),
+                };
+                let Some((kind, payload)) = store::take_due_deferred(conn, group_id, epoch)? else {
+                    return Ok(());
+                };
+                self.apply_payload(conn, &id, kind, &payload, &mut events, &mut follow)?;
             }
             Ok(())
         })?;
-        Ok((events, follow))
+        drop(id);
+        self.emit_all(events);
+        for f in follow {
+            if !matches!(&f, FollowUp::ReplayDeferred(g) if g == group_id) {
+                self.follow_up(f);
+            }
+        }
+        Ok(())
     }
 
     /// Records a member we learned about from MLS, warning when a known device's key changes.
@@ -278,10 +333,7 @@ impl Core {
                 "Messages in this chat are end-to-end encrypted. Only the two of you can read them."
                     .to_owned()
             }
-            ChatKind::Group => format!(
-                "{} added you to the group",
-                self.name_of(conn, id, &inviter.user_id)
-            ),
+            ChatKind::Group => format!("{} added you to the group", mention(&inviter.user_id)),
         };
         self.system_message(
             conn,
@@ -297,6 +349,7 @@ impl Core {
                 user_id: inviter.user_id,
             });
         }
+        follow.push(FollowUp::ReplayDeferred(chat_id.clone()));
         follow.push(FollowUp::SendProfile(chat_id));
         Ok(())
     }
@@ -305,15 +358,25 @@ impl Core {
         &self,
         conn: &Connection,
         id: &Identity,
+        kind: i32,
         payload: &[u8],
         events: &mut Vec<CoreEvent>,
         follow: &mut Vec<FollowUp>,
     ) -> CoreResult<()> {
         let (gid, message) = mls::parse_protocol_message(payload)?;
+        let msg_epoch = message.epoch().as_u64();
         let Some(chat) = store::chat(conn, &gid)? else {
-            return Ok(()); // not a chat we're in
+            // A group we haven't joined (yet): keep it a while in case our Welcome is late.
+            store::defer_envelope(conn, &gid, msg_epoch, kind, payload, now_ms())?;
+            return Ok(());
         };
         let mut group = self.inner.mls.load(conn, &gid)?;
+        if msg_epoch > mls::epoch(&group) {
+            // From an epoch we haven't reached: an earlier commit (possibly our own, still being
+            // confirmed) comes first. It's processed once we get there.
+            store::defer_envelope(conn, &gid, msg_epoch, kind, payload, now_ms())?;
+            return Ok(());
+        }
         match self.inner.mls.process(conn, &mut group, message)? {
             Incoming::Application { sender, plaintext } => {
                 if store::contact(conn, &sender.user_id)?.is_some_and(|c| c.blocked) {
@@ -325,13 +388,14 @@ impl Core {
                 for m in &summary.added {
                     self.learn_member(conn, m, events)?;
                 }
-                let me = (id.user_id, id.registered()?.device_id);
-                let by = self.name_of(conn, id, &sender.user_id);
+                let by = mention(&sender.user_id);
                 if !summary.added.is_empty() {
+                    let mut seen = std::collections::HashSet::new();
                     let names: Vec<String> = summary
                         .added
                         .iter()
-                        .map(|m| self.name_of(conn, id, &m.user_id))
+                        .filter(|m| seen.insert(m.user_id))
+                        .map(|m| mention(&m.user_id))
                         .collect();
                     self.system_message(
                         conn,
@@ -341,13 +405,12 @@ impl Core {
                         events,
                     )?;
                 }
-                for m in &summary.removed {
-                    let text = if m.user_id == sender.user_id || m.device_id == sender.device_id {
-                        format!("{} left", self.name_of(conn, id, &m.user_id))
-                    } else if m.user_id == me.0 {
-                        format!("{by} removed you")
+                let mut seen = std::collections::HashSet::new();
+                for m in summary.removed.iter().filter(|m| seen.insert(m.user_id)) {
+                    let text = if summary.departed.contains(&m.device_id) {
+                        format!("{} left", mention(&m.user_id))
                     } else {
-                        format!("{by} removed {}", self.name_of(conn, id, &m.user_id))
+                        format!("{by} removed {}", mention(&m.user_id))
                     };
                     self.system_message(
                         conn,
@@ -371,6 +434,11 @@ impl Core {
                 }
                 events.push(CoreEvent::ChatUpdated(chat.chat_id.clone()));
                 follow.push(FollowUp::RotateCallKeys(chat.chat_id.clone()));
+                follow.push(FollowUp::ReplayDeferred(chat.chat_id.clone()));
+                if !summary.added.is_empty() && !summary.self_removed {
+                    // Newcomers learn everyone's name from the members themselves.
+                    follow.push(FollowUp::SendProfile(chat.chat_id.clone()));
+                }
                 Ok(())
             }
             Incoming::Proposal { self_remove, .. } => {
@@ -632,7 +700,7 @@ impl Core {
                     avatar.as_deref(),
                 )?;
                 if name != chat.name && !chat.name.is_empty() {
-                    let by = self.name_of(conn, id, &sender.user_id);
+                    let by = mention(&sender.user_id);
                     self.system_message(
                         conn,
                         chat_id,
@@ -647,7 +715,7 @@ impl Core {
             Some(Body::Call(c)) => self.on_call_signal(conn, id, chat, sender, &c, events)?,
             Some(Body::Timer(t)) => {
                 store::set_chat_timer(conn, chat_id, t.seconds)?;
-                let by = self.name_of(conn, id, &sender.user_id);
+                let by = mention(&sender.user_id);
                 let text = if t.seconds == 0 {
                     format!("{by} turned off disappearing messages")
                 } else {
@@ -677,7 +745,8 @@ impl Core {
                     chat_id,
                     (&sender.user_id, &sender.device_id),
                     &format!(
-                        "{by} is moving the group to a new server. Pair again in person to follow."
+                        "{} is moving the group to a new server. Pair again in person to follow.",
+                        mention(&sender.user_id)
                     ),
                     events,
                 )?;
