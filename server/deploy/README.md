@@ -18,7 +18,8 @@ VPS
 
 ## Requirements
 
-* Debian 13 or Ubuntu 24.04, 2 vCPUs, 4 GB RAM, 40 GB disk, a public IPv4 address (§5.2).
+* Debian 13, Ubuntu 24.04 or Ubuntu 26.04, 2 vCPUs, 4 GB RAM, 40 GB disk, a public IPv4
+  address (§5.2).
 * SSH access with `sudo`.
 * Your cloud firewall (on AWS: the instance's **security group**) must allow inbound
   **7881/tcp** and **7882/udp** from anywhere, plus **22/tcp** from your own IP while you still
