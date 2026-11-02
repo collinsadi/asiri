@@ -233,3 +233,53 @@ async fn search_finds_messages_inside_the_encrypted_store() -> anyhow::Result<()
     assert!(ben.core.search("banana", 10)?.is_empty());
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn admins_see_devices_and_revoke_a_lost_mac() -> anyhow::Result<()> {
+    use asiri_core::ConnectionState;
+
+    let h = Harness::start().await?;
+    let ada = h.admin("Ada").await?;
+    let ben = h.invite(&ada, "Ben").await?;
+    let ben_device = ben.core.profile()?.device_id.expect("registered");
+
+    let status = ada.core.server_status().await?;
+    assert_eq!(status.devices.len(), 2);
+    assert!(
+        status
+            .devices
+            .iter()
+            .any(|(d, state, admin)| *d == ben_device && *state == 1 && !admin)
+    );
+    assert!(
+        ben.core.server_status().await.is_err(),
+        "members can't see the server"
+    );
+    assert!(
+        ada.core
+            .revoke_device(&ada.core.profile()?.device_id.expect("registered"))
+            .await
+            .is_err()
+    );
+
+    // Ben's Mac is stolen: Ada revokes it and the relay refuses it from then on.
+    ada.core.revoke_device(&ben_device).await?;
+    let status = ada.core.server_status().await?;
+    assert!(
+        status
+            .devices
+            .iter()
+            .any(|(d, state, _)| *d == ben_device && *state == 2)
+    );
+    eventually("the relay to drop the stolen Mac", PATIENCE, || {
+        ben.core.connection_state() != ConnectionState::Connected
+    })
+    .await?;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_ne!(
+        ben.core.connection_state(),
+        ConnectionState::Connected,
+        "a revoked Mac reconnected"
+    );
+    Ok(())
+}

@@ -7,6 +7,7 @@
 //! * Events are collected during a transaction and emitted after it commits, so a listener can
 //!   never observe uncommitted state or re-enter the core while a lock is held.
 
+mod admin;
 mod calls;
 mod connection;
 pub mod events;
@@ -32,6 +33,8 @@ use tokio::task::JoinHandle;
 pub use events::{CallInvite, ConnectionState, CoreEvent, EventSink, NullSink};
 pub use maintenance::LONG_SLEEP_S;
 pub use media::{AttachmentInput, blurhash_decode, blurhash_encode};
+pub use outbound::describe_timer;
+pub use pairing::CodeKind;
 pub use updater::{ReleaseManifest, UpdateInfo};
 pub use views::{
     CallRecord, CallSession, CallState, ChatSummary, MemberView, PairingStep, Profile,
