@@ -683,6 +683,8 @@ struct VoiceNoteView: View {
                 .font(Typo.meta)
                 .foregroundStyle(outgoing ? Palette.outgoingSecondary : Palette.incomingSecondary)
             }
+            // A fixed width: the Spacer in the meta row would otherwise stretch the bubble.
+            .frame(width: 170)
         }
         .id(tick)
         .padding(.vertical, 2)
