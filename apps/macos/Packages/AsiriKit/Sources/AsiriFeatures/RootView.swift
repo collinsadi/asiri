@@ -54,6 +54,8 @@ struct MainView: View {
         NavigationSplitView(columnVisibility: $columns) {
             ChatListView(app: app)
                 .navigationSplitViewColumnWidth(min: 260, ideal: Metrics.sidebarWidth, max: 420)
+                // Only the sidebar column can remove its toggle; the chat list is always there.
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             ZStack {
                 if let id = app.selectedChatID, app.selectedChat != nil {
@@ -99,10 +101,6 @@ struct MainView: View {
         .sheet(isPresented: $app.quickSwitcherOpen) {
             QuickSwitcher(app: app)
         }
-        // No toolbar: the chat list, the conversation header and the details pane reach the
-        // top of the window themselves (the window hides its title bar).
-        .toolbar(removing: .sidebarToggle)
-        .toolbar(.hidden, for: .windowToolbar)
     }
 }
 
