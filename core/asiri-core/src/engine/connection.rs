@@ -22,6 +22,15 @@ use crate::net::{self, Dialer};
 use crate::store::{self, MessageStatus};
 
 const ACK_BATCH: usize = 32;
+
+/// Aborts a task when dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
 
 impl Core {
@@ -96,7 +105,7 @@ impl Core {
             self.inner.network_wake.notify_one();
             return Ok(());
         }
-        let _ = self.inner.shutdown.send(false);
+        self.inner.shutdown.send_replace(false);
         let core = self.clone();
         *task = Some(self.inner.rt.spawn(async move { core.run_network().await }));
         Ok(())
@@ -104,7 +113,7 @@ impl Core {
 
     /// Closes the connection and stops reconnecting.
     pub async fn disconnect(&self) {
-        let _ = self.inner.shutdown.send(true);
+        self.inner.shutdown.send_replace(true);
         if let Ok(Some(c)) = self.inner.client.lock().map(|c| c.clone()) {
             c.close();
         }
@@ -179,17 +188,18 @@ impl Core {
             ConnectionState::Connected
         });
 
-        // The outbox drains in its own task so slow sends never delay incoming messages.
-        let outbox = {
+        // The outbox drains in its own task so slow sends never delay incoming messages. Both
+        // helpers stop with the session, even when the session itself is aborted.
+        let _outbox = AbortOnDrop({
             let core = self.clone();
             let client = Arc::clone(&client);
             tokio::spawn(async move { core.outbox_loop(client).await })
-        };
-        let maintenance = {
+        });
+        let _maintenance = AbortOnDrop({
             let core = self.clone();
             let client = Arc::clone(&client);
             tokio::spawn(async move { core.maintenance_loop(client).await })
-        };
+        });
 
         let mut acks: Vec<u64> = Vec::new();
         let mut ack_tick = tokio::time::interval(Duration::from_millis(250));
@@ -223,8 +233,6 @@ impl Core {
             let _ = client.ack(acks).await;
         }
         client.close();
-        outbox.abort();
-        maintenance.abort();
         result
     }
 

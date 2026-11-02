@@ -13,7 +13,7 @@ use std::time::Duration;
 use asiri_proto::Message as _;
 use asiri_proto::relay::v1::{self as wire, client_frame::Body as C, server_frame::Body as S};
 use futures::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
@@ -42,6 +42,7 @@ pub struct RelayClient {
     pending: Pending,
     next_req: AtomicU64,
     closed: Arc<AtomicBool>,
+    close_signal: Arc<Notify>,
     /// Bearer token for HTTP calls during this session.
     pub session_token: Vec<u8>,
     /// Our inbox.
@@ -106,12 +107,14 @@ impl RelayClient {
         let (push_tx, push_rx) = mpsc::channel::<Push>(256);
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let closed = Arc::new(AtomicBool::new(false));
+        let close_signal = Arc::new(Notify::new());
         tokio::spawn(io_loop(
             ws,
             out_rx,
             push_tx,
             Arc::clone(&pending),
             Arc::clone(&closed),
+            Arc::clone(&close_signal),
         ));
 
         Ok((
@@ -120,6 +123,7 @@ impl RelayClient {
                 pending,
                 next_req: AtomicU64::new(2),
                 closed,
+                close_signal,
                 session_token: ok.session_token,
                 inbox_id: id16(&ok.inbox_id)
                     .ok_or_else(|| CoreError::Network("malformed inbox id".into()))?,
@@ -175,9 +179,10 @@ impl RelayClient {
         self.request(C::Ack(wire::Ack { seqs })).await.map(|_| ())
     }
 
-    /// Ends the session.
+    /// Ends the session: the WebSocket closes right away and waiting requests fail.
     pub fn close(&self) {
         self.closed.store(true, Ordering::Relaxed);
+        self.close_signal.notify_one();
     }
 }
 
@@ -211,6 +216,7 @@ async fn io_loop<S2>(
     push: mpsc::Sender<Push>,
     pending: Pending,
     closed: Arc<AtomicBool>,
+    close_signal: Arc<Notify>,
 ) where
     S2: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -243,6 +249,7 @@ async fn io_loop<S2>(
                     _ => {}
                 }
             }
+            () = close_signal.notified() => break,
             frame = out.recv() => {
                 let Some(frame) = frame else { break };
                 if ws.send(Message::Binary(frame.encode_to_vec().into())).await.is_err() { break }

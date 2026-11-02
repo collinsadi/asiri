@@ -111,7 +111,7 @@ pub(crate) struct Inner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        let _ = self.shutdown.send(true);
+        self.shutdown.send_replace(true);
         if let Some(rt) = self.owned_rt.get_mut().ok().and_then(Option::take) {
             // The last reference may be dropped on one of the runtime's own threads, where a
             // runtime can't be shut down; a short-lived thread can always do it.
