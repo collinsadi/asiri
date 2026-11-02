@@ -31,5 +31,7 @@ let package = Package(
             ]
         ),
         .target(name: "AsiriBridge", dependencies: ["AsiriCoreKit", .product(name: "AsiriDomain", package: "AsiriKit")]),
+        // The bridge at run time: real cores, and with ASIRI_RELAY_CODE, a real relay.
+        .testTarget(name: "AsiriBridgeTests", dependencies: ["AsiriBridge", .product(name: "AsiriDomain", package: "AsiriKit")]),
     ]
 )

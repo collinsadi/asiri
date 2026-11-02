@@ -64,6 +64,17 @@ jobs:
           shared-key: macos-xcframework
       - name: Rust core → AsiriCoreFFI.xcframework and Swift bindings
         run: tools/release/build-xcframework.sh --debug --host-only
+      - name: The bridge at run time, against a development relay
+        run: |
+          set -o pipefail
+          cargo build -q -p asiri-sim --locked
+          target/debug/asiri-sim relay --listen 127.0.0.1:8099 > "$RUNNER_TEMP/relay.log" 2>&1 &
+          for _ in $(seq 1 60); do grep -q "ASIRI1:" "$RUNNER_TEMP/relay.log" && break; sleep 1; done
+          ASIRI_RELAY_CODE="$(grep -oE 'ASIRI1:[A-Za-z0-9_-]+' "$RUNNER_TEMP/relay.log" | head -1)"
+          test -n "$ASIRI_RELAY_CODE" || { cat "$RUNNER_TEMP/relay.log"; exit 1; }
+          export ASIRI_RELAY_CODE
+          cd apps/macos/Packages/AsiriCoreBridge
+          swift test 2>&1 | tee "$RUNNER_TEMP/bridge-tests.log"
       - name: Generate the Xcode project
         run: |
           brew install xcodegen >/dev/null
@@ -100,6 +111,8 @@ jobs:
         with:
           name: ci-app
           path: |
+            ${{ runner.temp }}/bridge-tests.log
+            ${{ runner.temp }}/relay.log
             ${{ runner.temp }}/app-build.log
             ${{ runner.temp }}/demo.log
             ${{ runner.temp }}/live.log
