@@ -99,7 +99,10 @@ struct MainView: View {
         .sheet(isPresented: $app.quickSwitcherOpen) {
             QuickSwitcher(app: app)
         }
+        // No toolbar: the chat list, the conversation header and the details pane reach the
+        // top of the window themselves (the window hides its title bar).
         .toolbar(removing: .sidebarToggle)
+        .toolbar(.hidden, for: .windowToolbar)
     }
 }
 
