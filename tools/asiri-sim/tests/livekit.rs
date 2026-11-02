@@ -78,10 +78,16 @@ async fn call_tokens_join_livekit_through_the_bridge() -> anyhow::Result<()> {
     assert!(contains(&join_b, &b.participant_alias));
     assert_eq!(a.room_alias, b.room_alias);
 
-    // A token that was tampered with is refused.
-    let mut forged = a.token.clone();
-    forged.pop();
-    forged.push(if a.token.ends_with('A') { 'B' } else { 'A' });
+    // A token that was tampered with is refused. (Change the signature's first character: the
+    // last one may only carry padding bits, which decode to the same signature.)
+    let (signed, signature) = a.token.rsplit_once('.').expect("a JWT");
+    let mut chars = signature.chars();
+    let first = chars.next().expect("a signature");
+    let forged = format!(
+        "{signed}.{}{}",
+        if first == 'A' { 'B' } else { 'A' },
+        chars.as_str()
+    );
     assert!(
         join(&a.url, &forged).await.is_err(),
         "LiveKit accepted a forged token"
