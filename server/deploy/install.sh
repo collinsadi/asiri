@@ -33,7 +33,10 @@ done
 ASIRI=/opt/asiri
 SRC=$(cd "$(dirname "$0")/../.." && pwd)
 DEPLOY="$SRC/server/deploy"
+# The containers' accounts (docker-compose.yml): the relay, LiveKit, and the group that may
+# read the LiveKit keys.
 RELAY_UID=10001
+LIVEKIT_UID=10002
 SECRETS_GID=10010
 
 log()  { printf '\n\033[1;35m==> %s\033[0m\n' "$*"; }
@@ -89,10 +92,21 @@ if ! command -v tor >/dev/null 2>&1; then
 fi
 
 log "Laying out ${ASIRI}"
-getent group asiri-secrets >/dev/null || groupadd --system --gid "$SECRETS_GID" asiri-secrets
+# Host accounts with the containers' IDs give their files and processes a name on the host.
+# Ubuntu 26.04 needs them too: its install and chown (uutils) refuse owners they can't look
+# up, numeric or not.
+getent group "$SECRETS_GID" >/dev/null || groupadd --system --gid "$SECRETS_GID" asiri-secrets
+for account in "$RELAY_UID:asiri-relay" "$LIVEKIT_UID:asiri-livekit"; do
+  getent passwd "${account%%:*}" >/dev/null || useradd --uid "${account%%:*}" --gid "$SECRETS_GID" \
+    --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "${account#*:}"
+done
+relay_user=$(getent passwd "$RELAY_UID" | cut -d: -f1)
+secrets_group=$(getent group "$SECRETS_GID" | cut -d: -f1)
 install -d -m 755 "$ASIRI" "$ASIRI/data"
-install -d -o "$RELAY_UID" -g "$SECRETS_GID" -m 750 "$ASIRI/data/relay" "$ASIRI/data/authorized"
-install -d -o root -g "$SECRETS_GID" -m 750 "$ASIRI/secrets"
+install -d -m 750 "$ASIRI/data/relay" "$ASIRI/data/authorized" "$ASIRI/secrets"
+chown "$relay_user:$secrets_group" "$ASIRI/data/relay" "$ASIRI/data/authorized"
+chown "root:$secrets_group" "$ASIRI/secrets"
+chmod 750 "$ASIRI/data/relay" "$ASIRI/data/authorized" "$ASIRI/secrets"
 if [ "$SRC" != "$ASIRI/src" ]; then
   rsync -a --delete --exclude target --exclude .git --exclude apps "$SRC/" "$ASIRI/src/"
   SRC="$ASIRI/src"; DEPLOY="$SRC/server/deploy"
@@ -105,7 +119,7 @@ if [ ! -s "$ASIRI/secrets/livekit_keys" ]; then
   secret=$(openssl rand -base64 64 | tr -d '\n/+=' | head -c 48)
   printf '%s: %s\n' "$key" "$secret" > "$ASIRI/secrets/livekit_keys"
 fi
-chown root:"$SECRETS_GID" "$ASIRI/secrets/livekit_keys"
+chown "root:$secrets_group" "$ASIRI/secrets/livekit_keys"
 chmod 640 "$ASIRI/secrets/livekit_keys"
 
 log "Public IPv4 for call media"
