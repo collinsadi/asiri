@@ -96,6 +96,11 @@ final class Launcher {
         observeActivation()
         self.app = app
         app.start()
+        // Touch ID guards the launch only when the Secure Enclave wraps the database key. In
+        // builds without it, and whenever a PIN is set, the lock screen comes first instead.
+        if !isDemo, PINStore().hasPIN || (app.prefs.appLockEnabled && KeyVault().protection != .secureEnclave) {
+            app.lock()
+        }
         watch(app)
         react(to: app)
     }
