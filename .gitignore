@@ -31,6 +31,9 @@ server/deploy/data/
 .env
 .env.*
 
+# Build output (scripts/ship.sh, tools/release/make-release.sh)
+/build/
+
 # Test and tooling output
 /dist/
 /artifacts/

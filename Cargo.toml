@@ -5,6 +5,7 @@ members = [
     "core/asiri-core",
     "core/asiri-ffi",
     "server/asiri-relay",
+    "tools/asiri-release",
     "tools/asiri-sim",
     "tools/proto-gen",
     "tools/uniffi-bindgen",

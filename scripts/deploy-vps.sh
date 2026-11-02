@@ -5,6 +5,7 @@
 #   scripts/deploy-vps.sh <user@host> <ssh-key> [install options]
 #   scripts/deploy-vps.sh <user@host> <ssh-key> --bootstrap '<onion client key from the app>'
 #   scripts/deploy-vps.sh <user@host> <ssh-key> --status
+#   scripts/deploy-vps.sh <user@host> <ssh-key> --publish dist/latest.json dist/Asiri-1.2.0.dmg
 #
 # Install options are passed to server/deploy/install.sh: --public-ip IP, --lockdown.
 # The committed HEAD of this repository is what gets deployed (git archive), and the relay is
@@ -13,7 +14,7 @@
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 
@@ -40,6 +41,22 @@ case "${1:-}" in
     ;;
   --status)
     remote "sudo docker compose -f /opt/asiri/docker-compose.yml ps; echo; echo relay onion: \$(sudo cat /var/lib/tor/asiri/hostname); sudo asiri-admin devices list"
+    exit 0
+    ;;
+  --publish)
+    # A release from tools/release/make-release.sh: the signed manifest and its disk image.
+    manifest="${2:?--publish needs the signed manifest (latest.json)}"
+    dmg="${3:?--publish needs the disk image}"
+    [ -f "$manifest" ] && [ -f "$dmg" ] || { echo "manifest or disk image not found" >&2; exit 1; }
+    name="$(basename "$dmg")"
+    scp "${SSH_OPTS[@]}" -q "$manifest" "$HOST:/tmp/asiri-latest.json"
+    scp "${SSH_OPTS[@]}" -q "$dmg" "$HOST:/tmp/$name"
+    # The installer first, then the manifest that points at it, so nobody sees a half release.
+    remote "sudo install -d -m 755 /opt/asiri/data/relay/releases \
+      && sudo install -m 644 '/tmp/$name' '/opt/asiri/data/relay/releases/$name' \
+      && sudo install -m 644 /tmp/asiri-latest.json /opt/asiri/data/relay/releases/latest.json \
+      && rm -f '/tmp/$name' /tmp/asiri-latest.json"
+    echo "Published $name. Asiri offers it within a day (or at once from Settings › About)."
     exit 0
     ;;
 esac

@@ -348,6 +348,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "asiri-release"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "asiri-core",
+ "base64 0.22.1",
+ "clap",
+ "ed25519-dalek",
+ "getrandom 0.3.4",
+ "hex",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
 name = "asiri-sim"
 version = "0.1.0"
 dependencies = [
