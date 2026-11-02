@@ -77,9 +77,17 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
 /// Starts the relay on `config.listen` (use port 0 for an ephemeral port) and returns the bound
 /// address. Used by tests, the simulator and local development.
 pub async fn spawn(config: Config) -> anyhow::Result<(SocketAddr, Arc<AppState>, JoinHandle<()>)> {
-    let listen = config.listen;
+    let listener = tokio::net::TcpListener::bind(config.listen).await?;
+    spawn_on(listener, config).await
+}
+
+/// Like [`spawn`], on a listener the caller already bound, so the caller knows the address
+/// before the relay starts (for example to set `public_address` to it).
+pub async fn spawn_on(
+    listener: tokio::net::TcpListener,
+    config: Config,
+) -> anyhow::Result<(SocketAddr, Arc<AppState>, JoinHandle<()>)> {
     let state = prepare(config)?;
-    let listener = tokio::net::TcpListener::bind(listen).await?;
     let addr = listener.local_addr()?;
     let app = router(Arc::clone(&state));
     let gc_task = spawn_gc(&state);

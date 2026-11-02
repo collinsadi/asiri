@@ -22,4 +22,4 @@ pub mod state;
 pub mod ws;
 
 pub use config::Config;
-pub use server::{serve, spawn};
+pub use server::{serve, spawn, spawn_on};
