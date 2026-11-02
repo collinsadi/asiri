@@ -31,6 +31,7 @@ scripts=(
   "$root/scripts/deploy-vps.sh"
   "$root/scripts/check-commit-message.sh"
   "$root/scripts/ci/check-commits.sh"
+  "$root/tools/release/build-xcframework.sh"
   "$root/.githooks/commit-msg"
 )
 syntax=1
