@@ -141,13 +141,21 @@ impl Core {
         let mut ev = Vec::new();
         let mut fu = Vec::new();
         conn.execute_batch("SAVEPOINT envelope")?;
-        let outcome = match PayloadKind::try_from(kind) {
-            Ok(PayloadKind::Welcome) => self.on_welcome(conn, id, payload, &mut ev, &mut fu),
-            Ok(PayloadKind::Application | PayloadKind::Commit | PayloadKind::Proposal) => {
-                self.on_mls(conn, id, kind, payload, &mut ev, &mut fu)
-            }
-            _ => Ok(()),
-        };
+        // A hostile message must never take the engine down, even through a bug in a dependency:
+        // a panic counts as a rejected message.
+        let outcome =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || match PayloadKind::try_from(kind) {
+                    Ok(PayloadKind::Welcome) => {
+                        self.on_welcome(conn, id, payload, &mut ev, &mut fu)
+                    }
+                    Ok(PayloadKind::Application | PayloadKind::Commit | PayloadKind::Proposal) => {
+                        self.on_mls(conn, id, kind, payload, &mut ev, &mut fu)
+                    }
+                    _ => Ok(()),
+                },
+            ))
+            .unwrap_or_else(|_| Err(CoreError::Crypto("a message crashed its decoder".into())));
         match outcome {
             Ok(()) => {
                 conn.execute_batch("RELEASE envelope")?;

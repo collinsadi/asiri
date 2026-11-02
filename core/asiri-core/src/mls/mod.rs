@@ -45,6 +45,8 @@ pub const PADDING: usize = 256;
 pub const KEY_PACKAGE_LIFETIME_S: u64 = 30 * 86_400;
 /// Label for call keys (§7.8).
 pub const CALL_EXPORTER_LABEL: &str = "asiri/call/v1";
+/// X-Wing public key size: ML-KEM-768 (1184 bytes) plus X25519 (32 bytes).
+pub const XWING_PUBLIC_KEY_LEN: usize = 1216;
 
 fn mls_err(e: impl std::fmt::Display) -> CoreError {
     CoreError::Crypto(e.to_string())
@@ -347,6 +349,14 @@ impl Mls {
             ));
         }
         let leaf = kp.leaf_node();
+        // Malformed HPKE keys must never reach the KEM (RUSTSEC-2026-0331, see deny.toml).
+        // The leaf key's TLS encoding is a 2-byte length prefix plus the key.
+        if kp.hpke_init_key().as_slice().len() != XWING_PUBLIC_KEY_LEN
+            || tls_codec::Size::tls_serialized_len(leaf.encryption_key())
+                != XWING_PUBLIC_KEY_LEN + 2
+        {
+            return Err(CoreError::Crypto("key package has a malformed key".into()));
+        }
         let info = member_info(leaf.credential(), leaf.signature_key().as_slice(), u32::MAX)?;
         Ok((kp, info))
     }

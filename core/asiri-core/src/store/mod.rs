@@ -407,10 +407,15 @@ impl Store {
     }
 
     /// Runs `f` with the connection inside one transaction.
+    ///
+    /// A panic inside `f` (a bug in a dependency, say) is contained: the transaction rolls back,
+    /// the connection stays usable and the caller gets [`CoreError::Internal`] instead of a
+    /// poisoned lock that would take the whole engine down.
     pub fn tx<T>(&self, f: impl FnOnce(&Connection) -> CoreResult<T>) -> CoreResult<T> {
         let conn = self.lock()?;
         let tx = conn.unchecked_transaction()?;
-        let out = f(&tx)?;
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&tx)))
+            .map_err(|_| CoreError::internal("an internal error was contained"))??;
         tx.commit()?;
         Ok(out)
     }
@@ -1562,6 +1567,19 @@ mod tests {
             status: MessageStatus::Received,
             expires_at_ms: None,
         }
+    }
+
+    #[test]
+    fn a_panic_inside_a_transaction_is_contained() {
+        let (store, chat) = store_with_chat();
+        let r: CoreResult<()> = store.tx(|c| {
+            insert_message(c, &text(&chat, 1, "rolled back", 1))?;
+            panic!("a bug in a dependency");
+        });
+        assert!(matches!(r, Err(CoreError::Internal(_))));
+        // The connection still works and the panicking transaction left nothing behind.
+        let conn = store.lock().unwrap();
+        assert!(message(&conn, &[9; 16], &[1; 16]).unwrap().is_none());
     }
 
     #[test]
