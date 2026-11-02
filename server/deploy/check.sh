@@ -29,9 +29,13 @@ scripts=(
   "$here/asiri-authsync"
   "$here/check.sh"
   "$root/scripts/deploy-vps.sh"
+  "$root/scripts/ship.sh"
+  "$root/scripts/e2e.sh"
   "$root/scripts/check-commit-message.sh"
   "$root/scripts/ci/check-commits.sh"
   "$root/tools/release/build-xcframework.sh"
+  "$root/tools/release/build-app.sh"
+  "$root/tools/release/make-release.sh"
   "$root/.githooks/commit-msg"
 )
 syntax=1
@@ -43,6 +47,14 @@ if have shellcheck; then
   if shellcheck -S warning "${scripts[@]}"; then ok "shellcheck"; else fail "shellcheck"; fi
 else
   skip "shellcheck" "not installed"
+fi
+# Ubuntu 26.04's install and chown (uutils) refuse a numeric owner that has no account, so the
+# installer creates the containers' accounts and passes owners by name.
+if grep -nE '(install .*-[og]|chown) +"?[^ ]*\$\{?[A-Z_]*(UID|GID)' "$here/install.sh" "$here/asiri-authsync" \
+  >"$work/numeric-owners"; then
+  fail "numeric owners for install or chown: $(cut -d: -f1,2 "$work/numeric-owners" | tr '\n' ' ')"
+else
+  ok "install and chown get owners by name"
 fi
 
 # The firewall exactly as install.sh renders it, in both modes.
