@@ -4,6 +4,7 @@ members = [
     "core/asiri-proto",
     "core/asiri-core",
     "server/asiri-relay",
+    "tools/asiri-sim",
     "tools/proto-gen",
 ]
 

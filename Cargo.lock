@@ -335,6 +335,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "asiri-sim"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "asiri-core",
+ "asiri-proto",
+ "asiri-relay",
+ "clap",
+ "futures",
+ "getrandom 0.3.4",
+ "hex",
+ "prost",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite 0.27.0",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
