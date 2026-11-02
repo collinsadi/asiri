@@ -48,7 +48,8 @@ libs=()
 for target in "${targets[@]}"; do
   say "Building asiri-ffi for $target ($profile)"
   rustup target add "$target" >/dev/null 2>&1 || true
-  cargo build -p asiri-ffi --locked --target "$target" "${cargo_profile[@]}" ${features[@]+"${features[@]}"}
+  # (Empty arrays are expanded with ${a[@]+…}: macOS's bash 3.2 treats them as unset under -u.)
+  cargo build -p asiri-ffi --locked --target "$target" ${cargo_profile[@]+"${cargo_profile[@]}"} ${features[@]+"${features[@]}"}
   libs+=("target/$target/$profile/libasiri_ffi.a")
 done
 
