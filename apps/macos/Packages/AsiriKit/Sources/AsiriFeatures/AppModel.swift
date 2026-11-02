@@ -377,6 +377,13 @@ public final class AppModel {
         perform { try self.core.declineCall(call.callID) }
     }
 
+    /// The name to put on a call tile for a LiveKit participant (a random alias): whoever the
+    /// call signals said it is, or "Someone" until they have.
+    public func participantName(alias: String, in call: CallID) -> String {
+        guard let user = try? core.callParticipant(call, alias: alias) else { return "Someone" }
+        return name(of: user)
+    }
+
     public func hangUp() {
         guard let call = activeCall else { return }
         activeCall = nil

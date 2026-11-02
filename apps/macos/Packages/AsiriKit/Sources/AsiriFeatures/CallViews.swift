@@ -49,6 +49,8 @@ public protocol CallMedia: AnyObject {
     var isSharingScreen: Bool { get }
     /// True only once the room reports encryption as active (§10.5).
     var isEncrypted: Bool { get }
+    /// Something the user should know right now ("Screen sharing needs permission…").
+    var notice: String? { get }
 
     func connect(_ session: CallSession) async
     func setMic(_ on: Bool) async
@@ -71,6 +73,7 @@ public final class PreviewCallMedia: CallMedia {
     public var isCameraOn = false
     public var isSharingScreen = false
     public var isEncrypted = false
+    public var notice: String?
     private let names: [String]
 
     public init(names: [String] = ["Ada Okafor"]) {
@@ -171,6 +174,7 @@ public struct CallView: View {
     let media: any CallMedia
     @State private var showEmoji = false
     @State private var started = Date()
+    @State private var confirmShare = false
 
     public init(app: AppModel, session: CallSession, media: any CallMedia) {
         self.app = app
@@ -189,8 +193,28 @@ public struct CallView: View {
                 controls
                     .padding(.bottom, 20)
             }
+            if let notice = media.notice {
+                VStack {
+                    Spacer()
+                    Text(notice)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        .padding(.bottom, 104)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(Motion.standard, value: media.notice)
         .environment(\.colorScheme, .dark)
+        .confirmationDialog("Share your screen?", isPresented: $confirmShare) {
+            Button("Share Screen") { Task { await media.setScreenShare(true) } }
+        } message: {
+            Text("Everyone in the call sees your whole screen, including any Asiri chats that are open on it.")
+        }
         .frame(minWidth: 420, minHeight: 360)
         .task {
             started = Date()
@@ -275,7 +299,11 @@ public struct CallView: View {
             }
             .keyboardShortcut("v", modifiers: [.command, .shift])
             CallControl(icon: "rectangle.on.rectangle", label: media.isSharingScreen ? "Stop sharing" : "Share screen", active: media.isSharingScreen) {
-                Task { await media.setScreenShare(!media.isSharingScreen) }
+                if media.isSharingScreen {
+                    Task { await media.setScreenShare(false) }
+                } else {
+                    confirmShare = true
+                }
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             Button {
