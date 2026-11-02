@@ -10,7 +10,7 @@ publish = false
 [features]
 default = []
 # Embedded Tor (Arti) transport for onion relays (docs/adr/0003-direct-transport-for-development.md).
-tor = ["dep:arti-client", "dep:tor-rtcompat"]
+tor = ["dep:arti-client", "dep:tor-rtcompat", "dep:tor-hscrypto", "dep:tor-llcrypto"]
 
 [dependencies]
 asiri-proto.workspace = true
@@ -50,6 +50,8 @@ thiserror.workspace = true
 tracing.workspace = true
 arti-client = { workspace = true, optional = true }
 tor-rtcompat = { workspace = true, optional = true }
+tor-hscrypto = { workspace = true, optional = true }
+tor-llcrypto = { workspace = true, optional = true }
 
 [dev-dependencies]
 asiri-relay.workspace = true

@@ -64,6 +64,8 @@ bytes = "1"
 # Tor (feature-gated in asiri-core; see docs/adr/0003-direct-transport-for-development.md)
 arti-client = { version = "0.47", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client", "keymgr", "experimental-api"] }
 tor-rtcompat = { version = "0.47", default-features = false, features = ["tokio", "rustls"] }
+tor-hscrypto = { version = "0.47", default-features = false }
+tor-llcrypto = { version = "0.47", default-features = false }
 
 # FFI
 uniffi = { version = "0.32", features = ["tokio"] }

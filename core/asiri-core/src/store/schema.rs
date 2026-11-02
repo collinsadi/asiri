@@ -126,6 +126,7 @@ CREATE TABLE outbox (
   kind        INTEGER NOT NULL,
   recipients  BLOB NOT NULL,
   payload     BLOB NOT NULL,
+  plaintext   BLOB,
   ttl_s       INTEGER NOT NULL DEFAULT 0,
   attempts    INTEGER NOT NULL DEFAULT 0,
   not_before_ms INTEGER NOT NULL DEFAULT 0,

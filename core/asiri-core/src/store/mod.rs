@@ -329,8 +329,11 @@ pub struct OutboxItem {
     pub kind: i32,
     /// Recipient inboxes.
     pub recipients: Vec<Id16>,
-    /// Padded MLS ciphertext.
+    /// Padded MLS ciphertext (empty until encrypted).
     pub payload: Vec<u8>,
+    /// The `AppMessage` still to be encrypted, for application messages queued while the
+    /// group couldn't encrypt (pending proposals) or that haven't been sent yet.
+    pub plaintext: Option<Vec<u8>>,
     /// Relay TTL (0 = default).
     pub ttl_s: u32,
     /// Send attempts so far.
@@ -1328,10 +1331,50 @@ pub fn enqueue(
     Ok(())
 }
 
+/// Queues an application message to be encrypted just before it is sent.
+pub fn enqueue_plain(
+    conn: &Connection,
+    envelope_id: &Id16,
+    chat_id: &[u8],
+    message_id: Option<&Id16>,
+    kind: i32,
+    plaintext: &[u8],
+    ttl_s: u32,
+) -> CoreResult<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO outbox(envelope_id, chat_id, message_id, kind, recipients, payload, plaintext, ttl_s, created_ms)
+         VALUES (?1, ?2, ?3, ?4, x'', x'', ?5, ?6, ?7)",
+        params![
+            &envelope_id[..],
+            chat_id,
+            message_id.map(|m| &m[..]),
+            kind,
+            plaintext,
+            i64::from(ttl_s),
+            now_ms()
+        ],
+    )?;
+    Ok(())
+}
+
+/// Stores the ciphertext and recipients of a lazily encrypted envelope.
+pub fn set_encrypted(
+    conn: &Connection,
+    id: i64,
+    recipients: &[Id16],
+    payload: &[u8],
+) -> CoreResult<()> {
+    conn.execute(
+        "UPDATE outbox SET recipients = ?2, payload = ?3, plaintext = NULL WHERE id = ?1",
+        params![id, encode_ids(recipients), payload],
+    )?;
+    Ok(())
+}
+
 /// The next envelopes that are due, oldest first.
 pub fn due_outbox(conn: &Connection, now: i64, limit: u32) -> CoreResult<Vec<OutboxItem>> {
     let mut stmt = conn.prepare(
-        "SELECT id, envelope_id, chat_id, message_id, kind, recipients, payload, ttl_s, attempts
+        "SELECT id, envelope_id, chat_id, message_id, kind, recipients, payload, ttl_s, attempts, plaintext
          FROM outbox WHERE not_before_ms <= ?1 ORDER BY id LIMIT ?2",
     )?;
     let rows = stmt
@@ -1347,6 +1390,7 @@ pub fn due_outbox(conn: &Connection, now: i64, limit: u32) -> CoreResult<Vec<Out
                 payload: r.get(6)?,
                 ttl_s: u32_col(r, 7)?,
                 attempts: u32_col(r, 8)?,
+                plaintext: r.get(9)?,
             })
         })?
         .collect::<Result<_, _>>()?;

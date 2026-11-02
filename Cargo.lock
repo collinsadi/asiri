@@ -280,6 +280,8 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.27.0",
  "tokio-util",
+ "tor-hscrypto",
+ "tor-llcrypto",
  "tor-rtcompat",
  "tracing",
  "tracing-subscriber",

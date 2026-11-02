@@ -7,8 +7,10 @@
 
 pub mod crypto;
 pub mod error;
+pub mod identity;
 pub mod ids;
 pub mod mls;
+pub mod net;
 pub mod store;
 
 pub use error::{CoreError, CoreResult};
