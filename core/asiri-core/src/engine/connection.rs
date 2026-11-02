@@ -322,6 +322,7 @@ impl Core {
                         to_inboxes: item.recipients.iter().map(|r| r.to_vec()).collect(),
                         payload: item.payload.clone(),
                         ttl_seconds: item.ttl_s,
+                        welcome: None,
                     }))
                     .await;
                 let mut events = Vec::new();

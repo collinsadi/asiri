@@ -29,9 +29,16 @@ fn send_frame() -> impl Strategy<Value = relay::ClientFrame> {
                     kind,
                     group_route: route,
                     epoch,
-                    to_inboxes: to,
-                    payload,
+                    to_inboxes: to.clone(),
+                    payload: payload.clone(),
                     ttl_seconds: ttl,
+                    welcome: (kind == relay::PayloadKind::Commit as i32).then(|| {
+                        relay::AttachedWelcome {
+                            envelope_id: vec![7; 16],
+                            to_inboxes: to,
+                            payload,
+                        }
+                    }),
                 })),
             },
         )

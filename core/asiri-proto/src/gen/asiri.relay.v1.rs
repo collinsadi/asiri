@@ -132,6 +132,23 @@ pub struct Send {
     /// optional; capped by server policy
     #[prost(uint32, tag = "7")]
     pub ttl_seconds: u32,
+    /// Commits that add members carry the Welcome for them. The relay queues it in the same
+    /// transaction that accepts the commit, so it is in the new members' inboxes before anything
+    /// sent in the new epoch, and is never queued when the commit loses its epoch (§9.5).
+    #[prost(message, optional, tag = "8")]
+    pub welcome: ::core::option::Option<AttachedWelcome>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AttachedWelcome {
+    /// 16 random bytes
+    #[prost(bytes = "vec", tag = "1")]
+    pub envelope_id: ::prost::alloc::vec::Vec<u8>,
+    /// the new members' inboxes
+    #[prost(bytes = "vec", repeated, tag = "2")]
+    pub to_inboxes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    /// padded MLS Welcome
+    #[prost(bytes = "vec", tag = "3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendResult {

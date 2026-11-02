@@ -373,6 +373,7 @@ async fn concurrent_commits_have_exactly_one_winner() {
             to_inboxes: vec![to.inbox_id.clone()],
             payload: vec![id; 64],
             ttl_seconds: 0,
+            welcome: None,
         })
     };
     let (ra, rb) = tokio::join!(sa.request(commit(1, &b)), sb.request(commit(2, &a)));

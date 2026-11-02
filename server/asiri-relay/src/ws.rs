@@ -286,7 +286,7 @@ impl Session {
         }
     }
 
-    async fn handle_send(&self, s: wire::Send) -> RelayResult<wire::SendResult> {
+    async fn handle_send(&self, mut s: wire::Send) -> RelayResult<wire::SendResult> {
         let result = |status: Status| wire::SendResult {
             status: status as i32,
             current_epoch: 0,
@@ -324,6 +324,30 @@ impl Session {
         } else {
             None
         };
+        // A Welcome rides along with the commit that adds its members (queued atomically).
+        let welcome = match s.welcome.take() {
+            Some(w) => {
+                if commit.is_none()
+                    || w.envelope_id.len() != asiri_proto::ID_LEN
+                    || w.to_inboxes.is_empty()
+                    || w.to_inboxes.len() > MAX_RECIPIENTS
+                {
+                    return Err(RelayError::BadRequest("invalid welcome"));
+                }
+                if w.payload.len() > limits.envelope_bytes {
+                    return Ok(result(Status::TooLarge));
+                }
+                let mut to = Vec::with_capacity(w.to_inboxes.len());
+                for inbox in &w.to_inboxes {
+                    let id = parse_id(inbox).ok_or(RelayError::BadRequest("invalid inbox"))?;
+                    if !to.contains(&id) {
+                        to.push(id);
+                    }
+                }
+                Some((to, w.envelope_id, w.payload))
+            }
+            None => None,
+        };
         let max_ttl = i64::from(limits.envelope_ttl_seconds);
         let ttl = if s.ttl_seconds == 0 {
             max_ttl
@@ -333,20 +357,38 @@ impl Session {
         let backlog = limits.inbox_backlog;
         let epoch = s.epoch;
         let rcpts = recipients.clone();
+        let mut woken = recipients;
+        if let Some((to, _, _)) = &welcome {
+            woken.extend(to.iter().copied());
+        }
         let outcome = self
             .state
             .db
             .call(move |c| {
                 let t = now();
-                db::fan_out(
-                    c,
-                    &rcpts,
-                    &db::OutgoingEnvelope {
+                let mut deliveries = vec![db::Delivery {
+                    recipients: &rcpts,
+                    envelope: db::OutgoingEnvelope {
                         envelope_id: &s.envelope_id,
                         kind: s.kind,
                         payload: &s.payload,
                         expires_at: t + ttl,
                     },
+                }];
+                if let Some((to, envelope_id, payload)) = &welcome {
+                    deliveries.push(db::Delivery {
+                        recipients: to,
+                        envelope: db::OutgoingEnvelope {
+                            envelope_id,
+                            kind: wire::PayloadKind::Welcome as i32,
+                            payload,
+                            expires_at: t + max_ttl,
+                        },
+                    });
+                }
+                db::fan_out_all(
+                    c,
+                    &deliveries,
                     commit.as_ref().map(|r| (r, epoch)),
                     backlog,
                     t,
@@ -355,7 +397,7 @@ impl Session {
             .await?;
         Ok(match outcome {
             FanOut::Queued(CommitOutcome::Accepted) => {
-                self.state.wake_inboxes(&recipients);
+                self.state.wake_inboxes(&woken);
                 result(Status::Accepted)
             }
             FanOut::Queued(CommitOutcome::StaleEpoch { current_epoch }) => wire::SendResult {

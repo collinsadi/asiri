@@ -87,6 +87,7 @@ impl Core {
                     to_inboxes: recipients.iter().map(|r| r.to_vec()).collect(),
                     payload: padding::pad_envelope(&out.commit),
                     ttl_seconds: 0,
+                    welcome: None,
                 }))
                 .await;
             let status = match reply {
@@ -570,6 +571,7 @@ impl Core {
                     to_inboxes: recipients.iter().map(|r| r.to_vec()).collect(),
                     payload: padding::pad_envelope(&proposal),
                     ttl_seconds: 0,
+                    welcome: None,
                 }))
                 .await?;
         }

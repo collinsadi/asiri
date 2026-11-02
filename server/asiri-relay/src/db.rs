@@ -145,6 +145,7 @@ pub struct StoredEnvelope {
 }
 
 /// An envelope to fan out.
+#[derive(Clone, Copy, Debug)]
 pub struct OutgoingEnvelope<'a> {
     /// Sender-chosen idempotency key.
     pub envelope_id: &'a [u8],
@@ -472,6 +473,15 @@ pub fn revoke_device(conn: &mut Connection, device_id: &Id, now: i64) -> RelayRe
 
 // ─── envelopes ──────────────────────────────────────────────────────────────
 
+/// One payload and the inboxes it goes to.
+#[derive(Clone, Copy, Debug)]
+pub struct Delivery<'a> {
+    /// Recipient inboxes.
+    pub recipients: &'a [Id],
+    /// The payload.
+    pub envelope: OutgoingEnvelope<'a>,
+}
+
 /// Queues one payload for every recipient inbox in a single transaction.
 ///
 /// For commits (`commit = Some((group_route, epoch))`) this is also where the relay enforces
@@ -486,6 +496,28 @@ pub fn fan_out(
     backlog_limit: u64,
     now: i64,
 ) -> RelayResult<FanOut> {
+    fan_out_all(
+        conn,
+        &[Delivery {
+            recipients,
+            envelope: *envelope,
+        }],
+        commit,
+        backlog_limit,
+        now,
+    )
+}
+
+/// Like [`fan_out`] for several payloads queued atomically: a commit together with the Welcome
+/// for the members it adds. Either every payload is queued or none is, so a Welcome is never
+/// delivered for a commit that lost its epoch, and always precedes later traffic in the group.
+pub fn fan_out_all(
+    conn: &mut Connection,
+    deliveries: &[Delivery<'_>],
+    commit: Option<(&Id, u64)>,
+    backlog_limit: u64,
+    now: i64,
+) -> RelayResult<FanOut> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
     // Every recipient must be an active device.
@@ -493,8 +525,8 @@ pub fn fan_out(
     {
         let mut stmt =
             tx.prepare_cached("SELECT 1 FROM devices WHERE inbox_id = ?1 AND state = 1")?;
-        for inbox in recipients {
-            if !stmt.exists(params![&inbox[..]])? {
+        for inbox in deliveries.iter().flat_map(|d| d.recipients) {
+            if !unknown.contains(inbox) && !stmt.exists(params![&inbox[..]])? {
                 unknown.push(*inbox);
             }
         }
@@ -506,7 +538,7 @@ pub fn fan_out(
     // Backlog limit (architecture §9.8).
     {
         let mut stmt = tx.prepare_cached("SELECT COUNT(*) FROM envelopes WHERE inbox_id = ?1")?;
-        for inbox in recipients {
+        for inbox in deliveries.iter().flat_map(|d| d.recipients) {
             let n: i64 = stmt.query_row(params![&inbox[..]], |r| r.get(0))?;
             if u64::try_from(n).unwrap_or(u64::MAX) >= backlog_limit {
                 return Ok(FanOut::InboxFull);
@@ -515,6 +547,9 @@ pub fn fan_out(
     }
 
     if let Some((route, epoch)) = commit {
+        let first = deliveries
+            .first()
+            .ok_or(RelayError::BadRequest("empty send"))?;
         let head: Option<(i64, Vec<u8>)> = tx
             .query_row(
                 "SELECT epoch, last_envelope_id FROM group_heads WHERE group_route = ?1",
@@ -527,7 +562,9 @@ pub fn fan_out(
             None if epoch == 0 => {}
             Some((h, _)) if h == epoch_i => {}
             // Idempotent retry of the commit that already won this epoch.
-            Some((h, ref last)) if h == epoch_i + 1 && last.as_slice() == envelope.envelope_id => {
+            Some((h, ref last))
+                if h == epoch_i + 1 && last.as_slice() == first.envelope.envelope_id =>
+            {
                 return Ok(FanOut::Queued(CommitOutcome::Accepted));
             }
             None => {
@@ -547,7 +584,12 @@ pub fn fan_out(
              ON CONFLICT(group_route) DO UPDATE
                SET epoch = excluded.epoch, last_envelope_id = excluded.last_envelope_id,
                    updated_day = excluded.updated_day",
-            params![&route[..], epoch_i + 1, envelope.envelope_id, day(now)],
+            params![
+                &route[..],
+                epoch_i + 1,
+                first.envelope.envelope_id,
+                day(now)
+            ],
         )?;
     }
 
@@ -562,20 +604,22 @@ pub fn fan_out(
             "INSERT INTO envelopes(inbox_id, seq, envelope_id, kind, payload, expires_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
-        for inbox in recipients {
-            // A retried send with the same envelope ID is a no-op for that inbox.
-            if dup.exists(params![&inbox[..], envelope.envelope_id])? {
-                continue;
+        for d in deliveries {
+            for inbox in d.recipients {
+                // A retried send with the same envelope ID is a no-op for that inbox.
+                if dup.exists(params![&inbox[..], d.envelope.envelope_id])? {
+                    continue;
+                }
+                let seq: i64 = next.query_row(params![&inbox[..]], |r| r.get(0))?;
+                insert.execute(params![
+                    &inbox[..],
+                    seq,
+                    d.envelope.envelope_id,
+                    d.envelope.kind,
+                    d.envelope.payload,
+                    d.envelope.expires_at
+                ])?;
             }
-            let seq: i64 = next.query_row(params![&inbox[..]], |r| r.get(0))?;
-            insert.execute(params![
-                &inbox[..],
-                seq,
-                envelope.envelope_id,
-                envelope.kind,
-                envelope.payload,
-                envelope.expires_at
-            ])?;
         }
     }
     tx.commit()?;
@@ -929,6 +973,71 @@ mod tests {
                 FanOut::Queued(CommitOutcome::StaleEpoch { current_epoch: 0 })
             );
             assert_eq!(queued_count(c, &inboxes[0])?, 3);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_welcome_is_queued_only_with_the_commit_that_wins() {
+        let (db, devs) = db_with_devices(3);
+        let (members, newcomer) = ([devs[0].1, devs[1].1], [devs[2].1]);
+        let route = [7u8; 16];
+        let welcome = |id: &'static [u8]| Delivery {
+            recipients: &newcomer,
+            envelope: OutgoingEnvelope {
+                envelope_id: id,
+                kind: 4,
+                payload: b"welcome",
+                expires_at: i64::MAX,
+            },
+        };
+        db.call_blocking(|c| {
+            let commit = |id: &'static [u8]| Delivery {
+                recipients: &members,
+                envelope: env(id, b"commit"),
+            };
+            let won = fan_out_all(
+                c,
+                &[commit(&[1; 16]), welcome(&[2; 16])],
+                Some((&route, 0)),
+                100,
+                0,
+            )?;
+            assert_eq!(won, FanOut::Queued(CommitOutcome::Accepted));
+            // A commit that lost its epoch takes its Welcome with it.
+            let lost = fan_out_all(
+                c,
+                &[commit(&[3; 16]), welcome(&[4; 16])],
+                Some((&route, 0)),
+                100,
+                0,
+            )?;
+            assert_eq!(
+                lost,
+                FanOut::Queued(CommitOutcome::StaleEpoch { current_epoch: 1 })
+            );
+            let got = envelopes_after(c, &newcomer[0], 0, 100, 0)?;
+            assert_eq!(got.len(), 1);
+            assert_eq!(got[0].envelope_id, [2; 16]);
+            assert_eq!(queued_count(c, &members[0])?, 1);
+            // Later group traffic lands behind the Welcome in the newcomer's inbox.
+            let next = fan_out(
+                c,
+                &[members[0], newcomer[0]],
+                &env(&[5; 16], b"next"),
+                Some((&route, 1)),
+                100,
+                0,
+            )?;
+            assert_eq!(next, FanOut::Queued(CommitOutcome::Accepted));
+            let got = envelopes_after(c, &newcomer[0], 0, 100, 0)?;
+            assert_eq!(
+                got.iter()
+                    .map(|e| e.envelope_id.clone())
+                    .collect::<Vec<_>>(),
+                vec![vec![2; 16], vec![5; 16]]
+            );
             Ok(())
         })
         .unwrap();

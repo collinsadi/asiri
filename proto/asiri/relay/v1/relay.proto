@@ -89,6 +89,16 @@ message Send {
   repeated bytes to_inboxes = 5; // recipients; the server fans out
   bytes payload = 6;             // padded MLS message
   uint32 ttl_seconds = 7;        // optional; capped by server policy
+  // Commits that add members carry the Welcome for them. The relay queues it in the same
+  // transaction that accepts the commit, so it is in the new members' inboxes before anything
+  // sent in the new epoch, and is never queued when the commit loses its epoch (§9.5).
+  AttachedWelcome welcome = 8;
+}
+
+message AttachedWelcome {
+  bytes envelope_id = 1;         // 16 random bytes
+  repeated bytes to_inboxes = 2; // the new members' inboxes
+  bytes payload = 3;             // padded MLS Welcome
 }
 
 message SendResult {
