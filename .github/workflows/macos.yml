@@ -1,5 +1,7 @@
-# The Mac app: AsiriKit's tests with a snapshot of every screen (kept as the `ci-snapshots`
-# artifact), and the full app — Rust core, Swift bridge, LiveKit calls — built and launched.
+# The Mac app, on Xcode 16 (macOS 15) and on Xcode 27 (macOS 27): AsiriKit's tests with a
+# snapshot of every screen (kept as `ci-snapshots-*`), and the full app — Rust core, Swift
+# bridge, LiveKit calls — built by tools/release/build-app.sh exactly as scripts/ship.sh
+# builds it on your Mac, then launched.
 name: macOS
 
 on:
@@ -21,13 +23,19 @@ env:
 
 jobs:
   kit:
-    name: AsiriKit (tests and snapshots)
-    runs-on: macos-15
-    timeout-minutes: 40
+    name: AsiriKit on ${{ matrix.xcode }} (tests and snapshots)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, xcode: Xcode 16 }
+          - { runner: xcode-27, xcode: Xcode 27 }
     steps:
       - uses: actions/checkout@v4
       - name: Xcode
-        run: xcodebuild -version && swift --version
+        run: sw_vers && xcodebuild -version && swift --version
       - name: Build
         working-directory: apps/macos/Packages/AsiriKit
         run: |
@@ -42,7 +50,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-snapshots
+          name: ci-snapshots-${{ matrix.runner }}
           path: |
             ${{ runner.temp }}/snapshots
             ${{ runner.temp }}/kit-build.log
@@ -50,20 +58,34 @@ jobs:
           retention-days: 14
 
   app:
-    name: Asiri.app (core, bridge, calls)
-    runs-on: macos-15
-    timeout-minutes: 75
+    name: Asiri.app on ${{ matrix.xcode }} (core, bridge, calls)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # A debug core keeps this one quick.
+          - { runner: macos-15, xcode: Xcode 16, core: --debug --host-only }
+          # The release core, exactly as scripts/ship.sh builds it.
+          - { runner: xcode-27, xcode: Xcode 27, core: --host-only }
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain (pinned in rust-toolchain.toml)
         run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
           rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+          sw_vers
           xcodebuild -version
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: macos-xcframework
+          shared-key: macos-${{ matrix.runner }}
       - name: Rust core → AsiriCoreFFI.xcframework and Swift bindings
-        run: tools/release/build-xcframework.sh --debug --host-only
+        run: tools/release/build-xcframework.sh ${{ matrix.core }}
       - name: The bridge at run time, against a development relay
         run: |
           set -o pipefail
@@ -75,24 +97,15 @@ jobs:
           export ASIRI_RELAY_CODE
           cd apps/macos/Packages/AsiriCoreBridge
           swift test 2>&1 | tee "$RUNNER_TEMP/bridge-tests.log"
-      - name: Generate the Xcode project
+      - name: Build Asiri.app (Release, the same script as scripts/ship.sh)
         run: |
-          brew install xcodegen >/dev/null
-          cd apps/macos && xcodegen generate
-      - name: Build Asiri.app
-        run: |
-          set -o pipefail
-          xcodebuild -project apps/macos/Asiri.xcodeproj -scheme Asiri -configuration Debug \
-            -destination 'platform=macOS' -derivedDataPath "$RUNNER_TEMP/dd" \
-            -skipPackagePluginValidation -skipMacroValidation \
-            CODE_SIGN_IDENTITY=- ENABLE_HARDENED_RUNTIME=NO build 2>&1 \
-            | tee "$RUNNER_TEMP/app-build.log" \
-            | grep -E "error:|\*\* BUILD|Undefined symbol|ld: " || true
-          grep -q "\*\* BUILD SUCCEEDED \*\*" "$RUNNER_TEMP/app-build.log"
+          command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
+          tools/release/build-app.sh --out "$RUNNER_TEMP/app"
       - name: The app launches, in demo mode and for real
         run: |
-          app="$RUNNER_TEMP/dd/Build/Products/Debug/Asiri.app"
+          app="$RUNNER_TEMP/app/Asiri.app"
           codesign --verify --verbose=2 "$app"
+          lipo -archs "$app/Contents/MacOS/Asiri"
           plutil -p "$app/Contents/Info.plist" | grep -E "CFBundleIdentifier|CFBundleIconName|NSCameraUsageDescription"
           "$app/Contents/MacOS/Asiri" --demo > "$RUNNER_TEMP/demo.log" 2>&1 &
           sleep 15
@@ -109,11 +122,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-app
+          name: ci-app-${{ matrix.runner }}
           path: |
             ${{ runner.temp }}/bridge-tests.log
             ${{ runner.temp }}/relay.log
-            ${{ runner.temp }}/app-build.log
+            ${{ runner.temp }}/app/xcodebuild.log
             ${{ runner.temp }}/demo.log
             ${{ runner.temp }}/live.log
             ${{ runner.temp }}/demo.png
