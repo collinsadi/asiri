@@ -237,3 +237,21 @@ final class LockingTests: XCTestCase {
         XCTAssertEqual(app.phase, .ready)
     }
 }
+
+final class CallLayoutTests: XCTestCase {
+    func testTilesFitTheWindowAtTheirLargest() {
+        let one = TileLayout(count: 1, in: CGSize(width: 800, height: 500))
+        XCTAssertEqual(one.columns, 1)
+        XCTAssertEqual(one.size, CGSize(width: 800, height: 500))
+
+        let four = TileLayout(count: 4, in: CGSize(width: 880, height: 540))
+        XCTAssertEqual(four.columns, 2)
+        XCTAssertLessThanOrEqual(2 * four.size.height + TileLayout.spacing, 540)
+        XCTAssertLessThanOrEqual(2 * four.size.width + TileLayout.spacing, 880)
+
+        // A wide, short window puts everyone in one row.
+        let wide = TileLayout(count: 3, in: CGSize(width: 1600, height: 320))
+        XCTAssertEqual(wide.columns, 3)
+        XCTAssertEqual(TileLayout(count: 0, in: .zero).size, .zero)
+    }
+}

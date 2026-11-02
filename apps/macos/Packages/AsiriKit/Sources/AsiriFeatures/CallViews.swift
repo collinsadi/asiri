@@ -276,16 +276,19 @@ public struct CallView: View {
 
     private var tiles: some View {
         let people = media.participants
-        let columns = people.count <= 1 ? 1 : (people.count <= 4 ? 2 : 3)
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 10) {
-            ForEach(people) { p in
-                ParticipantTile(participant: p, video: media.video(for: p), app: app, session: session)
-                    .aspectRatio(16 / 10, contentMode: .fit)
-                    .transition(.scale(scale: 0.9).combined(with: .opacity))
+        return GeometryReader { geo in
+            let layout = TileLayout(count: people.count, in: geo.size)
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(layout.size.width), spacing: TileLayout.spacing), count: layout.columns),
+                      spacing: TileLayout.spacing) {
+                ForEach(people) { p in
+                    ParticipantTile(participant: p, video: media.video(for: p), app: app, session: session)
+                        .frame(width: layout.size.width, height: layout.size.height)
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .animation(Motion.standard, value: people)
-        .frame(maxHeight: .infinity)
     }
 
     private var controls: some View {
@@ -323,6 +326,27 @@ public struct CallView: View {
     }
 }
 
+/// The largest 16:10 tiles that fit everyone in the space, and how many go in a row.
+struct TileLayout: Equatable {
+    static let spacing: CGFloat = 10
+    let columns: Int
+    let size: CGSize
+
+    init(count: Int, in space: CGSize) {
+        let n = max(count, 1)
+        var best = (columns: 1, width: CGFloat(0))
+        for columns in 1 ... n {
+            let rows = (n + columns - 1) / columns
+            let byWidth = (space.width - CGFloat(columns - 1) * Self.spacing) / CGFloat(columns)
+            let byHeight = (space.height - CGFloat(rows - 1) * Self.spacing) / CGFloat(rows) * 16 / 10
+            let width = max(0, min(byWidth, byHeight))
+            if width > best.width { best = (columns, width) }
+        }
+        columns = best.columns
+        size = CGSize(width: best.width.rounded(.down), height: (best.width * 10 / 16).rounded(.down))
+    }
+}
+
 struct ParticipantTile: View {
     let participant: CallParticipant
     let video: AnyView?
@@ -336,7 +360,9 @@ struct ParticipantTile: View {
             if let video {
                 video.clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             } else {
-                Avatar(id: Data(participant.name.utf8), name: participant.name, size: 72)
+                Avatar(id: participant.isLocal ? (app.profile?.userID ?? Data()) : Data(participant.id.utf8),
+                       name: participant.isLocal ? (app.profile?.name ?? "You") : participant.name,
+                       image: participant.isLocal ? app.profile?.avatar : nil, size: 72)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .scaleEffect(participant.isSpeaking ? 1.06 : 1)
                     .animation(Motion.bouncy, value: participant.isSpeaking)
