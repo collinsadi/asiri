@@ -1512,6 +1512,15 @@ impl AsiriCore {
         })
     }
 
+    /// The person behind a LiveKit participant identity (a random alias) in a call, once a
+    /// call signal has said; `None` until then.
+    pub fn call_participant(&self, call_id: Vec<u8>, alias: String) -> Result<Option<Vec<u8>>> {
+        Ok(self
+            .core
+            .call_participant(&id(&call_id)?, &alias)?
+            .map(|u| u.to_vec()))
+    }
+
     // ── server admin, updates, wipe ──
 
     /// The server's devices and usage (admins).

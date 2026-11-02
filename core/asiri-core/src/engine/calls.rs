@@ -13,13 +13,31 @@ use super::outbound::SendOpts;
 use super::{ActiveCall, CallRecord, CallSession, CallState, Core, CoreEvent, lock_err};
 use crate::crypto::sas;
 use crate::error::{CoreError, CoreResult};
-use crate::ids::{Id16, now_ms, random_bytes, random_id};
+use crate::ids::{Id16, id16, now_ms, random_bytes, random_id};
 use crate::mls;
 use crate::net::bridge::Bridge;
 use crate::store;
 
 /// LiveKit's key ring has 16 slots by default.
 const KEY_RING: u64 = 16;
+
+/// Records whose LiveKit alias this is in a call. Only call signals (authenticated by MLS) and
+/// our own sessions feed this, and an alias that's already claimed keeps its first owner, so
+/// a member can't take over someone else's tile.
+pub(crate) fn remember_alias(
+    c: &rusqlite::Connection,
+    call_id: &Id16,
+    alias: &str,
+    user: &Id16,
+) -> CoreResult<()> {
+    if valid_alias(alias) {
+        c.execute(
+            "INSERT OR IGNORE INTO call_participants(call_id, alias, user_id) VALUES (?1, ?2, ?3)",
+            rusqlite::params![&call_id[..], alias, &user[..]],
+        )?;
+    }
+    Ok(())
+}
 
 /// Room aliases are 1–64 of `[A-Za-z0-9_-]` (what the relay accepts).
 #[must_use]
@@ -169,7 +187,7 @@ impl Core {
                  VALUES (?1, ?2, ?3, ?4, 1, ?5, 0, ?6)",
                 rusqlite::params![&call_id[..], chat_id, room_alias, i64::from(video), &caller[..], now_ms()],
             )?;
-            Ok(())
+            remember_alias(c, &call_id, &session.participant_alias, &caller)
         })?;
         self.send_call_signal(
             chat_id,
@@ -196,12 +214,13 @@ impl Core {
         let session = self
             .call_session(&chat_id, *call_id, &room_alias, video)
             .await?;
+        let me = self.user_id()?;
         self.inner.store.tx(|c| {
             c.execute(
                 "UPDATE calls SET state = 1, answered_ms = ?2 WHERE call_id = ?1",
                 rusqlite::params![&call_id[..], now_ms()],
             )?;
-            Ok(())
+            remember_alias(c, call_id, &session.participant_alias, &me)
         })?;
         self.send_call_signal(
             &chat_id,
@@ -384,6 +403,21 @@ impl Core {
             |r| self.record_from_row(r),
         )
         .map_err(|_| CoreError::NotFound)
+    }
+
+    /// Who a LiveKit participant is: the person whose call signal claimed `alias` in this call
+    /// (including this user's own sessions), or `None` while no signal has said.
+    pub fn call_participant(&self, call_id: &Id16, alias: &str) -> CoreResult<Option<Id16>> {
+        use rusqlite::OptionalExtension as _;
+        let conn = self.inner.store.lock()?;
+        let user: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT user_id FROM call_participants WHERE call_id = ?1 AND alias = ?2",
+                rusqlite::params![&call_id[..], alias],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(user.as_deref().and_then(id16))
     }
 
     /// Recent calls, newest first (the Calls list).

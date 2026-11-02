@@ -174,6 +174,24 @@ async fn calls_share_one_key_and_end_cleanly() -> anyhow::Result<()> {
     })
     .await?;
     assert!(ada.core.is_call_active(&call_id));
+    // LiveKit only sees random aliases; the call signals tell each side whose alias is whose.
+    assert_eq!(
+        ben.core
+            .call_participant(&call_id, &outgoing.participant_alias)?,
+        Some(ada.user_id())
+    );
+    assert_eq!(
+        ada.core
+            .call_participant(&call_id, &answered.participant_alias)?,
+        Some(ben.user_id())
+    );
+    assert_eq!(
+        ada.core
+            .call_participant(&call_id, &outgoing.participant_alias)?,
+        Some(ada.user_id()),
+        "our own alias"
+    );
+    assert_eq!(ada.core.call_participant(&call_id, "rnobody")?, None);
 
     tokio::time::sleep(Duration::from_millis(1100)).await;
     ada.core.end_call(&call_id)?;

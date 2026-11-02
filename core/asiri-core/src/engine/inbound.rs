@@ -809,6 +809,12 @@ impl Core {
                      VALUES (?1, ?2, ?3, ?4, 0, ?5, 0, ?6)",
                     rusqlite::params![&call_id[..], chat.chat_id, c.room_alias, i64::from(c.video), &sender.user_id[..], now],
                 )?;
+                super::calls::remember_alias(
+                    conn,
+                    &call_id,
+                    &c.participant_alias,
+                    &sender.user_id,
+                )?;
                 events.push(CoreEvent::IncomingCall(CallInvite {
                     call_id,
                     chat_id: chat.chat_id.clone(),
@@ -817,10 +823,18 @@ impl Core {
                 }));
             }
             CallKind::Accept | CallKind::Joined => {
-                conn.execute(
+                let known = conn.execute(
                     "UPDATE calls SET state = 1, answered_ms = COALESCE(answered_ms, ?2) WHERE call_id = ?1",
                     rusqlite::params![&call_id[..], now],
                 )?;
+                if known > 0 {
+                    super::calls::remember_alias(
+                        conn,
+                        &call_id,
+                        &c.participant_alias,
+                        &sender.user_id,
+                    )?;
+                }
                 events.push(CoreEvent::CallUpdated { call_id });
             }
             CallKind::Decline | CallKind::Left | CallKind::End => {

@@ -191,5 +191,14 @@ CREATE TABLE calls (
   answered_ms INTEGER,
   ended_ms   INTEGER
 );
+
+-- LiveKit only knows random aliases. Call signals (inside MLS) say whose alias is whose, so
+-- tiles can show names without the server learning them. The first claim for an alias wins.
+CREATE TABLE call_participants (
+  call_id BLOB NOT NULL,
+  alias   TEXT NOT NULL,
+  user_id BLOB NOT NULL,
+  PRIMARY KEY (call_id, alias)
+);
 ",
 ];
