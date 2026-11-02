@@ -41,9 +41,10 @@ min_build="${min_build:-$build}"
 
 say() { printf '\033[1;35m▸\033[0m %s\n' "$*"; }
 
-identity="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
-[ -n "$identity" ] || { echo "No \"Developer ID Application\" certificate in the keychain (§16.1)." >&2; exit 1; }
-team="$(security find-certificate -c "$identity" -p | openssl x509 -noout -subject | sed -n 's/.*OU *= *\([A-Z0-9]\{10\}\).*/\1/p')"
+identity="${ASIRI_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
+  | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
+[[ "$identity" == "Developer ID Application: "* ]] \
+  || { echo "No \"Developer ID Application\" certificate in the keychain (§16.1)." >&2; exit 1; }
 say "Signing as $identity"
 
 public_key="$(cargo run -q --release -p asiri-release --locked -- public-key --key "$key")"
@@ -52,18 +53,16 @@ say "Building the core for Apple silicon and Intel"
 tools/release/build-xcframework.sh
 
 say "Building Asiri $version ($build)"
-(cd apps/macos && xcodegen generate --quiet)
 rm -rf build/release
-xcodebuild -project apps/macos/Asiri.xcodeproj -scheme Asiri -configuration Release \
-  -destination 'generic/platform=macOS' -derivedDataPath build/release/DerivedData \
-  -skipPackagePluginValidation -skipMacroValidation \
-  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
-  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" ASIRI_RELEASE_PUBLIC_KEY="$public_key" \
-  CODE_SIGN_IDENTITY="$identity" DEVELOPMENT_TEAM="$team" ENABLE_HARDENED_RUNTIME=YES \
-  OTHER_CODE_SIGN_FLAGS="--timestamp" build >build/release/xcodebuild.log 2>&1 \
-  || { grep -E "error:" build/release/xcodebuild.log | head -30 >&2; echo "see build/release/xcodebuild.log" >&2; exit 1; }
-app="build/release/DerivedData/Build/Products/Release/Asiri.app"
+ASIRI_SIGN_IDENTITY="$identity" tools/release/build-app.sh --out build/release --developer-id --timestamp \
+  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" ASIRI_RELEASE_PUBLIC_KEY="$public_key"
+app="build/release/Asiri.app"
+archs="$(lipo -archs "$app/Contents/MacOS/Asiri")"
+[[ "$archs" == *arm64* && "$archs" == *x86_64* ]] \
+  || { echo "A release runs on Apple silicon and Intel, but this build has only: $archs" >&2; exit 1; }
 codesign --verify --deep --strict --verbose=2 "$app"
+codesign -dv "$app" 2>&1 | grep -q 'flags=.*runtime' \
+  || { echo "The release must have the Hardened Runtime on (§6.9)" >&2; exit 1; }
 
 say "Packaging the disk image"
 mkdir -p dist build/release/dmg
