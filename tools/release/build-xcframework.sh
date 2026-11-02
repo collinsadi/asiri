@@ -39,6 +39,9 @@ command -v cargo >/dev/null || { echo "Rust is missing: https://rustup.rs" >&2; 
 
 # The objects must target the app's minimum macOS, or the linker warns on every file.
 export MACOSX_DEPLOYMENT_TARGET=14.0
+# Arti's directory downloads use xz. Build liblzma into the core rather than linking whatever
+# the Mac happens to have (Homebrew's, or an older system copy): the app must not depend on it.
+export LZMA_API_STATIC=1
 cargo_profile=()
 [ "$profile" = release ] && cargo_profile=(--release)
 
