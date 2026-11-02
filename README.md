@@ -76,8 +76,9 @@ asiri/
 `ship.sh` runs the Rust format, lint and test suites (including the end-to-end simulator and a
 malicious relay), builds the core into `AsiriCoreFFI.xcframework`, runs the Swift tests and
 renders every screen to `build/snapshots/`, then builds a Release `Asiri.app`. It signs with
-your Developer ID or Apple Development certificate when the keychain has one, and ad hoc (for
-this Mac only) otherwise.
+your Developer ID or Apple Development certificate when the keychain has one (if macOS asks
+whether `codesign` may use its key, choose **Always Allow**), and ad hoc (for this Mac only)
+otherwise.
 
 ### Try it on one Mac
 
@@ -113,6 +114,7 @@ cargo test --workspace                          # unit, relay and end-to-end tes
 cargo run -p asiri-sim -- relay                 # a development relay on 127.0.0.1:8080
 cargo run -p asiri-sim -- demo                  # three simulated people chatting
 ./tools/release/build-xcframework.sh            # Rust core → AsiriCoreFFI.xcframework
+./tools/release/build-app.sh                    # Asiri.app (Release) around it, in build/
 (cd apps/macos/Packages/AsiriKit && swift test) # the Swift tests and screen snapshots
 (cd apps/macos && xcodegen generate)            # the Xcode project, then open Asiri.xcodeproj
 ```
