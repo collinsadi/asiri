@@ -13,7 +13,7 @@ into this repository.
 
    `type` is one of `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `build`, `ci`, `chore`,
    `style` or `revert`. Common scopes: `core`, `mls`, `store`, `net`, `sync`, `media`, `calls`,
-   `pairing`, `ffi`, `relay`, `proto`, `sim`, `mac`, `ui`, `deploy`, `release`.
+   `pairing`, `ffi`, `relay`, `proto`, `sim`, `macos`, `design`, `deploy`, `release`.
    Keep the subject at 72 characters or fewer. Breaking changes add `!` after the type/scope and a
    `BREAKING CHANGE:` footer.
 
@@ -42,9 +42,15 @@ git config core.hooksPath .githooks
 ```bash
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-./scripts/e2e.sh              # Docker: relay + LiveKit + simulated clients
+./scripts/e2e.sh              # simulator suites, plus calls through LiveKit in Docker
 ./scripts/ship.sh             # everything, including the Mac app (macOS only)
 ```
+
+* **The Mac app** lives in Swift packages (`apps/macos/Packages`) so most of it builds and
+  tests without Xcode projects or Rust: `cd apps/macos/Packages/AsiriKit && swift test`.
+  Screens render against `PreviewCore`; every screen has a snapshot test. The Xcode project is
+  generated from `apps/macos/project.yml` with XcodeGen and is not committed.
+* **The icon** is drawn by `tools/design/make-icon.py`; change the script, not the PNGs.
 
 * **Dependencies** are pinned in the workspace `Cargo.toml` and `Cargo.lock`. Every new crate is
   reviewed before it is added and must pass `cargo deny check`.

@@ -30,7 +30,7 @@ The full design lives in [`docs/architecture.md`](docs/architecture.md).
 | **Verified in person** | Friends pair by scanning each other’s QR codes and comparing six emoji. A 60-digit safety number covers remote verification. |
 | **Encrypted at rest** | SQLCipher database whose key is wrapped by a Secure Enclave key; optional Touch ID app lock, duress PIN and panic wipe (crypto-shredding). |
 | **Calls** | LiveKit SFU with AES-GCM frame encryption; call keys come from the MLS exporter and rotate with every epoch. |
-| **A chat UI you’ll want to live in** | Telegram-style timeline with tailed bubbles, patterned wallpaper, reactions with bursts, swipe-to-reply, voice notes with waveforms, and fast spring animations that respect Reduce Motion. |
+| **A chat UI you’ll want to live in** | Telegram-style timeline with tailed bubbles, patterned wallpaper, reactions with bursts, replies, edits, voice notes with waveforms, a ⌘K switcher, and fast spring animations that respect Reduce Motion. |
 
 ## Repository layout
 
@@ -47,9 +47,11 @@ asiri/
 │   └── deploy/                # docker compose, LiveKit, tor, nftables, systemd, installer
 ├── apps/macos/                # the native Mac app (SwiftUI) and its Swift packages
 ├── tools/
-│   ├── asiri-sim/             # headless clients, scenario runner, malicious relay
+│   ├── asiri-sim/             # dev relay, headless clients, test buddy, malicious relay
+│   ├── asiri-release/         # the offline release key and signed update manifests
+│   ├── design/                # the app icon, drawn from code
 │   ├── uniffi-bindgen/        # pinned bindings generator
-│   └── release/               # XCFramework build, manifest signing, notarization helpers
+│   └── release/               # XCFramework build and release packaging
 ├── scripts/                   # dev, e2e and ship scripts
 └── docs/                      # architecture, threat model, ADRs, operations
 ```
@@ -59,25 +61,72 @@ asiri/
 ### Prerequisites
 
 * macOS 14 Sonoma or later (Apple silicon recommended) with Xcode 16 or later
-* Rust (stable, see `rust-toolchain.toml`) — `rustup` installs the right toolchain automatically
-* Homebrew packages: `xcodegen` (the ship script installs it if missing)
+* Rust (`rustup`; the toolchain is pinned in `rust-toolchain.toml` and installs itself)
+* Homebrew, for XcodeGen (the ship script installs it when it's missing)
 
 ### One command
 
 ```bash
-./scripts/ship.sh            # build the Rust core, the Mac app, run every test suite
-./scripts/ship.sh --run      # …and launch Asiri against a local relay
+./scripts/ship.sh                  # every check and test suite, then build/Asiri.app
+./scripts/ship.sh --run --demo     # …and open it on demo data (no server needed)
+./scripts/ship.sh --run --local    # …and start a development relay on this Mac to join
+./scripts/ship.sh --install        # …and copy it into /Applications
 ```
+
+`ship.sh` runs the Rust format, lint and test suites (including the end-to-end simulator and a
+malicious relay), builds the core into `AsiriCoreFFI.xcframework`, runs the Swift tests and
+renders every screen to `build/snapshots/`, then builds a Release `Asiri.app`. It signs with
+your Developer ID or Apple Development certificate when the keychain has one, and ad hoc (for
+this Mac only) otherwise.
+
+### Try it on one Mac
+
+```bash
+./scripts/ship.sh --run --local                    # 1. Asiri plus a development relay
+cargo run -q -p asiri-sim -- buddy --name Ben      # 2. in another terminal: a friend to talk to
+```
+
+In Asiri choose **Set up a server** and paste the code the relay printed. Then open **Add a
+Friend in Person…**, paste Ben's code, and paste Asiri's reply back into Ben's terminal. Ben
+answers your messages, reacts, and downloads your photos, files and voice notes, all over real
+MLS through the relay. (The development relay skips Tor; never use it for real chats.)
+
+### Run your own server
+
+```bash
+scripts/deploy-vps.sh ubuntu@your-server your-key.pem                 # install or update
+scripts/deploy-vps.sh ubuntu@your-server your-key.pem --bootstrap '<key shown in Asiri>'
+scripts/deploy-vps.sh ubuntu@your-server your-key.pem --status
+```
+
+The first command installs Docker, Tor, the relay and LiveKit, and locks the firewall down.
+Calls also need TCP 7881 and UDP 7882 open in your cloud provider's firewall (an AWS security
+group, for example). In Asiri choose **Set up a server**: it shows the `--bootstrap` command
+with your Mac's key, and the code that command prints makes this Mac the server's admin.
+[`server/deploy/README.md`](server/deploy/README.md) has the details.
 
 ### Pieces individually
 
 ```bash
-cargo test --workspace                     # Rust unit, property and integration tests
-cargo run -p asiri-relay -- serve --dev    # a local relay on 127.0.0.1:8080 (no Tor)
-cargo run -p asiri-sim -- scenario all     # headless end-to-end scenarios against it
-./scripts/e2e.sh                           # relay + LiveKit in Docker + every scenario
-./tools/release/build-xcframework.sh       # Rust core → AsiriCoreFFI.xcframework
+cargo test --workspace                          # unit, relay and end-to-end tests
+./scripts/e2e.sh                                # the simulator suites, plus LiveKit in Docker
+cargo run -p asiri-sim -- relay                 # a development relay on 127.0.0.1:8080
+cargo run -p asiri-sim -- demo                  # three simulated people chatting
+./tools/release/build-xcframework.sh            # Rust core → AsiriCoreFFI.xcframework
+(cd apps/macos/Packages/AsiriKit && swift test) # the Swift tests and screen snapshots
+(cd apps/macos && xcodegen generate)            # the Xcode project, then open Asiri.xcodeproj
 ```
+
+### Releases
+
+```bash
+cargo run -p asiri-release -- keygen --out release.key     # once; keep it offline
+tools/release/make-release.sh --version 1.2.0 --build 42 --key release.key --notary-profile asiri
+scripts/deploy-vps.sh ubuntu@your-server your-key.pem --publish dist/latest.json dist/Asiri-1.2.0.dmg
+```
+
+Asiri checks for updates once a day through the relay, verifies the manifest against the
+release key built into the app and the disk image against the manifest, and then offers it.
 
 ## Status
 
