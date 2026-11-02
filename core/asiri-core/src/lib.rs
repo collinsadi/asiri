@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod crypto;
+pub mod engine;
 pub mod error;
 pub mod identity;
 pub mod ids;
@@ -13,4 +14,9 @@ pub mod mls;
 pub mod net;
 pub mod store;
 
+pub use engine::{
+    CallInvite, CallRecord, CallSession, CallState, ChatFlag, ChatSummary, ConnectionState, Core,
+    CoreConfig, CoreEvent, EventSink, MemberView, NullSink, PairingStep, Profile, ReleaseManifest,
+    ServerStatus, Settings, UpdateInfo,
+};
 pub use error::{CoreError, CoreResult};
