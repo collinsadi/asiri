@@ -60,7 +60,7 @@ public final class ConversationModel {
     public var lastReaction: (MessageID, String)?
 
     @ObservationIgnored private var loaded = false
-    @ObservationIgnored private var unreadAtOpen = 0
+    @ObservationIgnored private(set) var unreadAtOpen = 0
     @ObservationIgnored private var firstUnreadID: MessageID?
     @ObservationIgnored private var typingTask: Task<Void, Never>?
     @ObservationIgnored public var isAtBottom = true

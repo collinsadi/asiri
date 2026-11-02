@@ -84,9 +84,11 @@ struct ConversationView: View {
             .defaultScrollAnchor(.bottom)
             .scrollContentBackground(.hidden)
             .onAppear {
-                // Open at the first unread message, like Telegram, or at the newest one. Lazy
-                // rows settle their heights after the first pass, so aim again once they have.
-                let opening = model.rows.contains { $0.id == "unread" } ? ("unread", UnitPoint.top) : ("bottom", UnitPoint.bottom)
+                // Open at the newest message, or, when more arrived than a screen holds, at the
+                // first unread one, like Telegram. Lazy rows settle their heights after the first
+                // pass, so aim again once they have.
+                let manyUnread = model.unreadAtOpen > 8 && model.rows.contains { $0.id == "unread" }
+                let opening = manyUnread ? ("unread", UnitPoint.top) : ("bottom", UnitPoint.bottom)
                 proxy.scrollTo(opening.0, anchor: opening.1)
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(80))
