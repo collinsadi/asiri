@@ -8,4 +8,6 @@ pub mod evil;
 pub mod harness;
 
 pub use evil::{Action, Proxy};
-pub use harness::{Client, Harness, Options, PATIENCE, Recorder, eventually};
+pub use harness::{
+    Client, Harness, LIVEKIT_KEY, LIVEKIT_SECRET, Options, PATIENCE, Recorder, eventually,
+};

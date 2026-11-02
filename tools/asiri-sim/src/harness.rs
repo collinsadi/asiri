@@ -23,6 +23,12 @@ use crate::evil::Proxy;
 /// How long the helpers wait for something to happen across the network.
 pub const PATIENCE: Duration = Duration::from_secs(30);
 
+/// LiveKit API key the simulated relay signs call tokens with. A LiveKit server started with
+/// the same key pair (as CI does) accepts them.
+pub const LIVEKIT_KEY: &str = "APIsimulator";
+/// LiveKit API secret matching [`LIVEKIT_KEY`].
+pub const LIVEKIT_SECRET: &str = "simulator-secret-0123456789abcdefghijklmnop";
+
 /// Records every event a client's core emits.
 #[derive(Default)]
 pub struct Recorder {
@@ -257,8 +263,8 @@ impl Harness {
         config.listen = relay_addr;
         config.public_address = address.to_string();
         config.livekit = Some(LiveKitKeys {
-            api_key: "APIsimulator".into(),
-            api_secret: "simulator-secret-0123456789abcdefghijklmnop".into(),
+            api_key: LIVEKIT_KEY.into(),
+            api_secret: LIVEKIT_SECRET.into(),
         });
         let (_, relay, task) = asiri_relay::spawn_on(listener, config).await?;
         Ok(Self {
