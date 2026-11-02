@@ -1,0 +1,6 @@
+# Swift bindings (tools/release/build-xcframework.sh). The generated Swift file compiles into the
+# AsiriCoreKit package target; the C header and module map ship inside AsiriCoreFFI.xcframework.
+[bindings.swift]
+module_name = "AsiriCoreKit"
+ffi_module_name = "AsiriCoreFFI"
+ffi_module_filename = "AsiriCoreFFI"

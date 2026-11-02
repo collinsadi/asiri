@@ -1,0 +1,33 @@
+[package]
+name = "asiri-ffi"
+description = "Swift bindings for asiri-core (UniFFI), packaged as an XCFramework for the Mac app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "asiri_ffi"
+# staticlib: linked into the app through the XCFramework. cdylib: lets uniffi-bindgen read the
+# interface metadata in library mode. lib: Rust tests.
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[features]
+default = ["tor"]
+# Embedded Tor (Arti). Builds without it can only reach direct (development) relays.
+tor = ["asiri-core/tor"]
+
+[dependencies]
+asiri-core.workspace = true
+uniffi.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
