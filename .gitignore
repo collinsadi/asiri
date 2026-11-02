@@ -19,7 +19,7 @@ xcuserdata/
 
 # Generated Rust → Swift bridge (rebuilt by tools/release/build-xcframework.sh)
 apps/macos/Frameworks/
-apps/macos/Packages/AsiriKit/Sources/AsiriCoreKit/Generated/
+apps/macos/Packages/AsiriCoreBridge/Sources/AsiriCoreKit/Generated/
 
 # Local runtime data and secrets — never commit these
 /.asiri-dev/

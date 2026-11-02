@@ -14,7 +14,7 @@
 #
 # Outputs (both ignored by git):
 #   apps/macos/Frameworks/AsiriCoreFFI.xcframework
-#   apps/macos/Packages/AsiriKit/Sources/AsiriCoreKit/Generated/AsiriCoreKit.swift
+#   apps/macos/Packages/AsiriCoreBridge/Sources/AsiriCoreKit/Generated/AsiriCoreKit.swift
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -72,7 +72,7 @@ rm -rf "$out"
 mkdir -p "$(dirname "$out")"
 xcodebuild -create-xcframework -library "$work/libasiri_ffi.a" -headers "$work/headers" -output "$out" >/dev/null
 
-generated="$root/apps/macos/Packages/AsiriKit/Sources/AsiriCoreKit/Generated"
+generated="$root/apps/macos/Packages/AsiriCoreBridge/Sources/AsiriCoreKit/Generated"
 mkdir -p "$generated"
 cp "$work/swift/AsiriCoreKit.swift" "$generated/AsiriCoreKit.swift"
 
