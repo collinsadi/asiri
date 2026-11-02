@@ -13,13 +13,16 @@ struct AsiriApp: App {
             MainWindow(launcher: launcher)
         }
         .defaultSize(width: 1180, height: 760)
-        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
+        // No title bar band: the chat list and the conversation header run up to the top edge,
+        // with the window controls over the chat list, as in Telegram.
+        .windowStyle(.hiddenTitleBar)
         .commands { AsiriCommands(app: launcher.app) }
 
         Window("Call", id: WindowID.call) {
             CallWindow(launcher: launcher)
         }
         .defaultSize(width: 900, height: 620)
+        .windowStyle(.hiddenTitleBar)
 
         Settings {
             SettingsWindow(launcher: launcher)
