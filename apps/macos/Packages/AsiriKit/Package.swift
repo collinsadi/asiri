@@ -6,8 +6,8 @@
 //   AsiriPlatform  Keychain and Secure Enclave, app lock, notifications, QR, media, system events
 //   AsiriFeatures  the app state and every screen
 //
-// The real core comes from the AsiriCoreBridge package, so these targets build without
-// compiling Rust.
+// The real core comes from the AsiriCoreBridge package, so these targets (and their tests and
+// snapshots) build without compiling Rust.
 import PackageDescription
 
 let package = Package(
@@ -35,5 +35,9 @@ let package = Package(
             ]
         ),
         .target(name: "AsiriFeatures", dependencies: ["AsiriDomain", "AsiriDesign", "AsiriPlatform"]),
+        .testTarget(
+            name: "AsiriFeaturesTests",
+            dependencies: ["AsiriFeatures", "AsiriDomain", "AsiriDesign", "AsiriPlatform"]
+        ),
     ]
 )
