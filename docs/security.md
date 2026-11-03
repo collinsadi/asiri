@@ -1,6 +1,6 @@
 # Security engineering notes
 
-How the code meets the threat model in [architecture.md §4](architecture.md#4-threat-model), and
+How the code meets the threat model in [architecture.md §3](architecture.md#3-threat-model), and
 what is checked on every push. For reporting a vulnerability, see [SECURITY.md](../SECURITY.md).
 
 ## What CI proves on every push
@@ -15,11 +15,12 @@ what is checked on every push. For reporting a vulnerability, see [SECURITY.md](
 | Call identities | `tools/asiri-sim/tests/media_calls.rs` | LiveKit only sees random aliases; MLS-authenticated call signals map them to people, first claim wins |
 | Test buddy | `tools/asiri-sim/tests/buddy.rs` | A headless friend pairs like a new Mac and exchanges texts, reactions and files, and declines calls |
 | Release signing | `tools/asiri-release` | Manifests verify only with the release key; a changed manifest or disk image is refused |
+| Releases | `.github/workflows/release.yml` | A release is built only from a tag on main whose commit passed CI; it's signed, notarized and attested, and its update manifest is signed offline ([ADR-0008](adr/0008-releases-from-ci.md)) |
 | Hidden from screen capture | `CaptureShieldTests`, `scripts/ci/check-hidden-windows.swift` | Windows leave screenshots, recordings and screen sharing before they're first shown, windows that open later follow, and none of the launched app's windows can be captured ([ADR-0007](adr/0007-hidden-from-screen-capture.md)) |
-| Mac app | `.github/workflows/macos.yml` | The Swift packages build and pass their tests, every screen renders in light and dark mode, and the app builds with the core and LiveKit, then launches |
+| Mac app | `.github/workflows/macos.yml` | The Swift packages build and pass their tests, every screen renders in light and dark mode, and the app builds with the core and LiveKit, launches, and packs into the release's disk image |
 | Icon | `tools/design/make-icon.py --check` | The committed icon matches its generator |
 | Dependency policy | `cargo deny check` | Known vulnerabilities, licenses, sources and banned crates |
-| Deployment kit | `server/deploy/check.sh` | Firewall, Tor and LiveKit configuration, scripts, the relay image |
+| Deployment kit | `server/deploy/check.sh`, `.github/workflows/ci.yml` | The firewall, Tor and LiveKit configuration and every script check out, and the relay image builds and runs |
 | Commit rules | `scripts/ci/check-commits.sh` | Conventional Commits, no AI attribution |
 
 ## Malicious relay: what clients do
@@ -33,10 +34,10 @@ what is checked on every push. For reporting a vulnerability, see [SECURITY.md](
 | reorders messages | shows them in the sender's order, with no false alarm | `reordered_messages_are_shown_in_order` |
 | invents envelopes of every kind | rejects them all; nothing is created | `fabricated_envelopes_change_nothing` |
 | withholds a commit | keeps later messages until the commit arrives, and if it never does, says the chat is out of sync | `a_withheld_commit_is_reported`, `a_late_commit_unblocks_waiting_messages` |
-| offers a key that wasn't verified in person | refuses to create the chat | `fetch_key_packages` in `engine/groups.rs` |
+| offers a key that wasn't verified in person | refuses to create the chat | `fetch_key_packages` in `core/asiri-core/src/engine/groups.rs` |
 
 Commits are ordered by the relay (one per epoch per group), but clients enforce the admin policy
-themselves ([§7.5](architecture.md#75-group-admin-policy)): a commit that breaks it is rejected by
+themselves ([§7.5](architecture.md#75-membership-changes-and-admin-rules)): a commit that breaks it is rejected by
 every receiver no matter what the relay accepted.
 
 ## Containing failures
