@@ -15,6 +15,7 @@ what is checked on every push. For reporting a vulnerability, see [SECURITY.md](
 | Call identities | `tools/asiri-sim/tests/media_calls.rs` | LiveKit only sees random aliases; MLS-authenticated call signals map them to people, first claim wins |
 | Test buddy | `tools/asiri-sim/tests/buddy.rs` | A headless friend pairs like a new Mac and exchanges texts, reactions and files, and declines calls |
 | Release signing | `tools/asiri-release` | Manifests verify only with the release key; a changed manifest or disk image is refused |
+| Hidden from screen capture | `CaptureShieldTests` | Windows leave screenshots, recordings and screen sharing before they're first shown, and windows that open later follow ([ADR-0007](adr/0007-hidden-from-screen-capture.md)) |
 | Mac app | `.github/workflows/macos.yml` | The Swift packages build and pass their tests, every screen renders in light and dark mode, and the app builds with the core and LiveKit, then launches |
 | Icon | `tools/design/make-icon.py --check` | The committed icon matches its generator |
 | Dependency policy | `cargo deny check` | Known vulnerabilities, licenses, sources and banned crates |

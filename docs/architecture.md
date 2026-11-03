@@ -1350,7 +1350,7 @@ message ServerMove { string onion_address = 1; }  // accepted only from group ad
 - [ ] Release builds log only errors, without identifiers, and have no debug menus.
 - [ ] Secrets zeroized after use. Keys cross into Swift as bytes; base64 only at the LiveKit boundary.
 - [ ] FileVault checked at first launch, with a warning if it's off.
-- [ ] macOS can't reliably block screenshots, so disappearing messages and trust between friends are the defense there.
+- [ ] Every window is left out of screenshots, screen recordings and screen sharing (`sharingType = .none`) from its first frame ([ADR-0007](adr/0007-hidden-from-screen-capture.md)). That can't stop a camera pointed at the screen, so disappearing messages and trust between friends are the defense beyond it.
 
 ### 14.2 Server
 

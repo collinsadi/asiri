@@ -1,6 +1,7 @@
 import AppKit
 import AsiriBridge
 import AsiriFeatures
+import AsiriPlatform
 import SwiftUI
 
 @main
@@ -11,6 +12,7 @@ struct AsiriApp: App {
     var body: some Scene {
         Window("Asiri", id: WindowID.main) {
             MainWindow(launcher: launcher)
+                .captureShielded()
         }
         .defaultSize(width: 1180, height: 760)
         // No title bar band: the chat list and the conversation header run up to the top edge,
@@ -20,16 +22,19 @@ struct AsiriApp: App {
 
         Window("Call", id: WindowID.call) {
             CallWindow(launcher: launcher)
+                .captureShielded()
         }
         .defaultSize(width: 900, height: 620)
         .windowStyle(.hiddenTitleBar)
 
         Settings {
             SettingsWindow(launcher: launcher)
+                .captureShielded()
         }
 
         MenuBarExtra {
             MenuBarContent(launcher: launcher)
+                .captureShielded()
         } label: {
             MenuBarLabel(launcher: launcher)
         }
@@ -41,6 +46,12 @@ struct AsiriApp: App {
 /// the window back, and quitting closes the connection cleanly.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Before any window exists: Asiri never appears in screenshots, recordings or screen
+    /// sharing (§14.1).
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        CaptureShield.start()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

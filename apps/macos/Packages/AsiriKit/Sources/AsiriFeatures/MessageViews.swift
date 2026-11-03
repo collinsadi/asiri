@@ -60,6 +60,7 @@ struct MessageRow: View {
                         showReactions = false
                         model.toggleReaction(emoji, on: message)
                     }
+                    .captureShielded()
                 }
                 Button { model.reply(to: message) } label: {
                     Image(systemName: "arrowshape.turn.up.left.fill")

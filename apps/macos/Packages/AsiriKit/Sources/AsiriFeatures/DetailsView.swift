@@ -1,6 +1,7 @@
 import AppKit
 import AsiriDesign
 import AsiriDomain
+import AsiriPlatform
 import SwiftUI
 
 /// The details pane (⌥⌘I): who's in the chat, verification, timer, media, and leaving.
@@ -47,7 +48,10 @@ struct DetailsView: View {
             Text("The history is erased from this Mac only. Other people keep their copies.")
         }
         .sheet(isPresented: $editingGroup) {
-            if let chat = model.chat { EditGroupSheet(app: app, chat: chat) }
+            Group {
+                if let chat = model.chat { EditGroupSheet(app: app, chat: chat) }
+            }
+            .captureShielded()
         }
     }
 

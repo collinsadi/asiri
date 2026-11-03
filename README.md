@@ -29,6 +29,7 @@ The full design lives in [`docs/architecture.md`](docs/architecture.md).
 | **No metadata leaks** | Messaging goes over embedded Tor (Arti) to an onion service that outsiders can’t even discover. No DNS, no CA, no push service, no analytics. |
 | **Verified in person** | Friends pair by scanning each other’s QR codes and comparing six emoji. A 60-digit safety number covers remote verification. |
 | **Encrypted at rest** | SQLCipher database whose key is wrapped by a Secure Enclave key; optional Touch ID app lock, duress PIN and panic wipe (crypto-shredding). |
+| **Invisible to screen capture** | Asiri's windows never appear in screenshots, screen recordings or screen sharing, its own included ([ADR-0007](docs/adr/0007-hidden-from-screen-capture.md)). |
 | **Calls** | LiveKit SFU with AES-GCM frame encryption; call keys come from the MLS exporter and rotate with every epoch. |
 | **A chat UI you’ll want to live in** | Telegram-style timeline with tailed bubbles, patterned wallpaper, reactions with bursts, replies, edits, voice notes with waveforms, a ⌘K switcher, and fast spring animations that respect Reduce Motion. |
 

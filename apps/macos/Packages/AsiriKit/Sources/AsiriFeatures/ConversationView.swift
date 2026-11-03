@@ -1,5 +1,6 @@
 import AsiriDesign
 import AsiriDomain
+import AsiriPlatform
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -41,7 +42,7 @@ struct ConversationView: View {
             return !urls.isEmpty
         } isTargeted: { dropTargeted = $0 }
         .sheet(item: $viewer) { m in
-            MediaViewer(message: m, model: model)
+            MediaViewer(message: m, model: model).captureShielded()
         }
         .onAppear { model.open() }
     }

@@ -1,5 +1,6 @@
 import AsiriDesign
 import AsiriDomain
+import AsiriPlatform
 import SwiftUI
 
 /// The main window: onboarding, the lock screen, or the three-pane messenger (§13.2).
@@ -92,16 +93,19 @@ struct MainView: View {
         }
         .animation(Motion.bouncy, value: app.incomingCall)
         .sheet(item: $app.sheet) { sheet in
-            switch sheet {
-            case .newChat: NewChatSheet(app: app)
-            case .newGroup: NewGroupSheet(app: app)
-            case .addFriend: AddFriendSheet(app: app)
-            case let .addMembers(chat): AddMembersSheet(app: app, chatID: chat)
-            case let .verify(user): VerifySheet(app: app, user: user)
+            Group {
+                switch sheet {
+                case .newChat: NewChatSheet(app: app)
+                case .newGroup: NewGroupSheet(app: app)
+                case .addFriend: AddFriendSheet(app: app)
+                case let .addMembers(chat): AddMembersSheet(app: app, chatID: chat)
+                case let .verify(user): VerifySheet(app: app, user: user)
+                }
             }
+            .captureShielded()
         }
         .sheet(isPresented: $app.quickSwitcherOpen) {
-            QuickSwitcher(app: app)
+            QuickSwitcher(app: app).captureShielded()
         }
     }
 }
