@@ -121,7 +121,10 @@ if ! check="$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1)"; then
   $developer_id && die "Asiri.app's signature doesn't check out"
   echo "(the signature didn't verify strictly; Asiri still runs on this Mac)" >&2
 fi
-if codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q get-task-allow; then
+# (Captured, then matched: piped into grep -q, codesign could die of SIGPIPE under pipefail and
+# the check would pass without looking.)
+entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)"
+if [[ "$entitlements" == *get-task-allow* ]]; then
   die "Asiri.app would let a debugger attach (com.apple.security.get-task-allow)"
 fi
 echo "Built $app ($(lipo -archs "$app/Contents/MacOS/Asiri" 2>/dev/null || echo "$archs"))"

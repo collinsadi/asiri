@@ -95,7 +95,7 @@ apt-get update -q
 apt-get install -y -q ca-certificates curl gnupg nftables unattended-upgrades openssl rsync iproute2
 
 mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-if [ "${mem_kb:-0}" -lt 3500000 ] && ! swapon --show | grep -q .; then
+if [ "${mem_kb:-0}" -lt 3500000 ] && [ -z "$(swapon --show)" ]; then
   log "Adding a 2 GB swap file (this machine has less than 4 GB of RAM; the Rust build needs it)"
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
   grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab

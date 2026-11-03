@@ -137,7 +137,8 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/certificate.p12"
-          security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" \
+          identities="$(security find-identity -v -p codesigning "$keychain")"
+          [[ "$identities" == *"Developer ID Application"* ]] \
             || { echo "::error::The certificate secret holds no Developer ID Application identity"; exit 1; }
       - name: Notarization key
         env:

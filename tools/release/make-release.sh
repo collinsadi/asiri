@@ -133,7 +133,8 @@ archs="$(lipo -archs "$app/Contents/MacOS/Asiri")"
 [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] \
   || die "A release runs on Apple silicon and Intel, but this build has only: $archs"
 codesign --verify --deep --strict --verbose=2 "$app"
-codesign -dv "$app" 2>&1 | grep -q 'flags=.*runtime' \
+signature="$(codesign -dv "$app" 2>&1)"
+[[ "$signature" == *"flags="*"(runtime)"* ]] \
   || die "The release must have the Hardened Runtime on (architecture §6.9)"
 
 if [ ${#notary[@]} -gt 0 ]; then
