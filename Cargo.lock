@@ -247,7 +247,7 @@ dependencies = [
  "arti-client",
  "asiri-proto",
  "asiri-relay",
- "base64 0.22.1",
+ "base64 0.23.1",
  "blurhash",
  "bytes",
  "chacha20poly1305",
@@ -307,7 +307,7 @@ dependencies = [
 name = "asiri-proto"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "proptest",
  "prost",
 ]
@@ -319,7 +319,7 @@ dependencies = [
  "anyhow",
  "asiri-proto",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "clap",
  "data-encoding",
@@ -354,7 +354,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "asiri-core",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "ed25519-dalek",
  "getrandom 0.3.4",
