@@ -28,3 +28,12 @@ identical for both, so tests over the direct transport exercise the production c
 
 A release build can be configured to bypass Tor, which is why the option is hidden, labelled, and
 logged to the user as a persistent banner while active. Removing it for v1.0 is a one-line change.
+
+## Amendment (2026-11-03)
+
+As built, the Tor dialer is `OnionDialer` (`core/asiri-core/src/net/tor.rs`). There is no
+Debug-only gate, *Developer* setting or banner. A device uses the direct transport only when the
+server code it joined with names a direct address, which only development relays (`asiri-sim
+relay`, `scripts/ship.sh --local`) print. **Settings › Network** then shows the route
+**Direct (development only)** and a warning that this Mac reaches its server without Tor. A
+server installed by the deployment kit always hands out onion addresses.

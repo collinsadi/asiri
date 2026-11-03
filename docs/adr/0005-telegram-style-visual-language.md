@@ -25,3 +25,9 @@ Night `#14122B`, Indigo `#4F46E5` and Amber `#F5A524`.
 
 The look is familiar to anyone who has used a modern messenger, but nothing in it is borrowed
 artwork, which keeps the app's identity distinct and avoids trade-dress problems.
+
+## Amendment (2026-11-03)
+
+As built, the chat wallpaper scatters SF Symbols (locks, keys, moons, sparks and more) rather
+than glyphs drawn for Asiri, and the app honors Reduce Motion but has no separate treatment for
+Reduce Transparency yet. Bubble tails, the icon and the install window's picture are Asiri's own.

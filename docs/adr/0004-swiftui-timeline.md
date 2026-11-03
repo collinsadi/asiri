@@ -34,3 +34,10 @@ without touching the rest of the conversation screen.
 If Instruments shows hitches on the §13.6 budgets (60/120 fps scrolling, < 100 ms to open a chat)
 that windowing cannot fix, we switch the `TimelineView` implementation to `NSTableView` and
 supersede this ADR.
+
+## Amendment (2026-11-03)
+
+As built, history loads in pages of 80 (`ConversationModel.pageSize`), and scrolling back keeps
+the pages it has loaded: there's no 400-row window yet. The timeline lives in the conversation
+screen itself rather than behind a separate `TimelineView` type. Both remain the plan if long
+chats show hitches against the §13.6 budgets.

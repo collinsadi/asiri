@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The conversation background: a soft gradient with a faint, hand-scattered pattern of
-/// Asiri's own glyphs (locks, keys, moons, sparks). Deterministic, so it never shifts between
-/// launches, and rasterized once.
+/// The conversation background: a soft gradient with a faint, hand-scattered pattern of SF
+/// Symbols (locks, keys, moons, sparks). Deterministic, so it never shifts between launches, and
+/// rasterized once.
 public struct ChatWallpaper: View {
     private static let glyphs = [
         "lock.fill", "key.fill", "moon.stars.fill", "sparkles", "bubble.left.fill", "heart.fill",
