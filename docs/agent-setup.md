@@ -26,7 +26,8 @@ already on the Asiri server (usually the person who runs it).
 5. **Don't change Asiri's code or settings to get past an error.** Stop, tell the user what failed
    and which log has the details, and let the inviter look. A patched messenger is worse than
    none.
-6. **Stay out of the user's chats.** No screenshots of Asiri's windows, no reading its data.
+6. **Stay out of the user's chats.** Don't read Asiri's data. Screenshots won't help either:
+   Asiri hides its windows from screenshots and screen sharing, so ask the user what they see.
 
 ## What it takes
 
@@ -127,7 +128,7 @@ From here on the user does everything. Tell them:
    list, stays on **New to Asiri**, and scans the QR code on the user's screen.
 2. The inviter's Mac shows a QR code of its own. On the user's Mac, choose **Scan their code** and
    hold it up to the camera. An iPhone works as the camera too (Continuity Camera).
-3. Asiri shows **Connecting securely…**. The first connection through Tor can take a minute or
+3. Asiri shows **Connecting securely through Tor…**. The first connection can take a minute or
    two.
 4. Both Macs show six emoji. If they're the same, in the same order, both choose **They match**.
    If not, both choose **They don't match** and pair again, face to face.
@@ -180,7 +181,7 @@ from source doesn't update itself, so this is how it stays current.
 | A test fails | Report it with its log. Don't build with `--quick` to get around it unless the user agrees |
 | Swift packages fail to download | Usually the network or a proxy: try again, or on another network |
 | Copying into `/Applications` is refused | The user's account isn't an administrator: open `build/Asiri.app` from `~/Asiri` instead |
-| **Connecting securely…** for more than three minutes | Tor may be blocked or slow on this network, as on many office and school networks. Try another one, such as a phone hotspot. If that doesn't help, the inviter checks that the server is up |
+| **Connecting securely through Tor…** for more than three minutes | Tor may be blocked or slow on this network, as on many office and school networks. Try another one, such as a phone hotspot. If that doesn't help, the inviter checks that the server is up |
 | The code is refused | Codes work once and for 24 hours: the inviter starts a new invitation |
 | Calls connect but there's no sound or picture | The server's firewall must allow 7881/tcp and 7882/udp: the inviter's job |
 | Scanning shows no camera | System Settings › Privacy & Security › Camera: allow Asiri. Or paste the codes instead |
