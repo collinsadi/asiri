@@ -37,4 +37,6 @@ Asiri's own screen sharing therefore never shows Asiri.
   on each new macOS release, and keep notification previews off (the default), because macOS
   draws notification banners itself.
 * `CaptureShieldTests` checks that windows are shielded before they're shown and when they appear
-  later.
+  later, and CI launches the real app and checks that none of its windows can be captured
+  (`scripts/ci/check-hidden-windows.swift`). The screenshots CI keeps of the running app show
+  the desktop without it.

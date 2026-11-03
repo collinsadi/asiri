@@ -110,6 +110,7 @@ jobs:
           "$app/Contents/MacOS/Asiri" --demo > "$RUNNER_TEMP/demo.log" 2>&1 &
           sleep 15
           kill -0 $! && echo "demo mode is up"
+          swift scripts/ci/check-hidden-windows.swift $!   # never in screenshots or screen sharing
           screencapture -x "$RUNNER_TEMP/demo.png" || true
           kill $! || true
           ASIRI_LOG=info "$app/Contents/MacOS/Asiri" > "$RUNNER_TEMP/live.log" 2>&1 &
