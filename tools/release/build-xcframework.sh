@@ -4,7 +4,7 @@
 #
 #   1. asiri-ffi for Apple silicon and Intel, combined into one static library,
 #   2. the Swift bindings, C header and module map (UniFFI, library mode),
-#   3. AsiriCoreFFI.xcframework, which the AsiriKit Swift package links.
+#   3. AsiriCoreFFI.xcframework, which the AsiriCoreBridge Swift package links.
 #
 #   tools/release/build-xcframework.sh [--debug] [--no-tor] [--host-only]
 #

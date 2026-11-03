@@ -17,7 +17,6 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&out_dir)?;
 
     let protoc = protoc_bin_vendored::protoc_bin_path()?;
-    // SAFETY-free: prost-build reads PROTOC from the environment of this process only.
     let mut config = prost_build::Config::new();
     config.protoc_executable(protoc);
     config.out_dir(&out_dir);

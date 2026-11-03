@@ -4,7 +4,7 @@ import AsiriPlatform
 import Foundation
 import Observation
 
-/// How a bubble sits among its neighbours (Telegram-style grouping, docs/adr/0005).
+/// How a bubble sits among its neighbours (Telegram-style grouping, ADR-0005).
 public struct BubbleGrouping: Hashable, Sendable {
     /// The previous message is from the same sender within a few minutes.
     public var groupedAbove: Bool

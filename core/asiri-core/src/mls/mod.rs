@@ -2,7 +2,8 @@
 //!
 //! * Every chat is an MLS group using `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (hybrid
 //!   X25519 + ML-KEM-768). There is no fallback suite: negotiation failures are hard errors.
-//! * Handshake and application messages are always `PrivateMessage`s, padded to 256 bytes.
+//! * Handshake and application messages are always `PrivateMessage`s, padded to a multiple of
+//!   256 bytes.
 //! * The ratchet tree travels inside Welcome messages; the relay never stores it.
 //! * Two private group-context extensions, readable only by members:
 //!   `asiri.group` (the relay route and chat kind) and `asiri.admins` (who may add or remove

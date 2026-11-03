@@ -51,7 +51,8 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Asiri/Asiri.entitlements
         # §6.9: Hardened Runtime on, with no exceptions. Ad-hoc local builds turn it off
-        # (scripts/ship.sh), because library validation rejects ad-hoc-signed frameworks.
+        # (tools/release/build-app.sh), because library validation rejects ad-hoc-signed
+        # frameworks.
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"

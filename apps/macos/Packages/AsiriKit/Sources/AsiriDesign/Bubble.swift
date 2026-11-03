@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A message bubble with a tail on the sender's side (docs/adr/0005).
+/// A message bubble with a tail on the sender's side (ADR-0005).
 ///
 /// Consecutive messages from the same person are grouped: only the last one has a tail, and the
 /// corners where bubbles meet are tighter. Space for the tail is always reserved, so grouped

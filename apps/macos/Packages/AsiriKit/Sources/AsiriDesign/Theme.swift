@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Asiri's visual language (architecture §13.8, docs/adr/0005): Night, Indigo and Amber on the
+// Asiri's visual language (architecture §13.8, ADR-0005): Night, Indigo and Amber on the
 // system grays, SF Pro for the interface and SF Mono for safety numbers.
 
 public extension Color {

@@ -10,7 +10,7 @@
 //!
 //! The app only installs a disk image whose size and SHA-256 match a manifest signed by this
 //! key, so the key never goes near the server: sign on your Mac, then publish the manifest and
-//! the DMG with `asiri-relay release publish`.
+//! the DMG with `scripts/deploy-vps.sh … --publish` (docs/releasing.md).
 
 #![allow(clippy::print_stdout)]
 
