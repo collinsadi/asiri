@@ -90,6 +90,10 @@ else
   signing=(CODE_SIGN_IDENTITY=- ENABLE_HARDENED_RUNTIME=NO)
   echo "No signing certificate in the keychain: signing ad hoc (runs on this Mac only)"
 fi
+# Xcode adds com.apple.security.get-task-allow to everything it signs in a `build` (only archives
+# drop it). That entitlement lets a debugger attach to Asiri and read its memory, and the notary
+# service refuses apps that have it.
+signing+=(CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO)
 
 # ── Build ────────────────────────────────────────────────────────────────────
 (cd apps/macos && xcodegen generate --quiet)
@@ -116,5 +120,8 @@ if ! check="$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1)"; then
   printf '%s\n' "$check" >&2
   $developer_id && die "Asiri.app's signature doesn't check out"
   echo "(the signature didn't verify strictly; Asiri still runs on this Mac)" >&2
+fi
+if codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q get-task-allow; then
+  die "Asiri.app would let a debugger attach (com.apple.security.get-task-allow)"
 fi
 echo "Built $app ($(lipo -archs "$app/Contents/MacOS/Asiri" 2>/dev/null || echo "$archs"))"
