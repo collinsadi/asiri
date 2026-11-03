@@ -238,12 +238,9 @@ struct JoinFlow: View {
                             .frame(width: 220)
                     }
                 }
-                if working {
-                    ProgressView("Connecting securely…")
-                        .controlSize(.small)
-                        .foregroundStyle(.white)
-                }
+                if working { ConnectingStatus(app: app) }
                 Button("Back", action: onBack).buttonStyle(SecondaryButtonStyle())
+                    .disabled(working)
             }
         }
         .onAppear { offer = (try? app.core.deviceOfferCode()) ?? "" }
@@ -309,12 +306,14 @@ struct SetUpServerFlow: View {
             }
             HStack {
                 Button("Back", action: onBack).buttonStyle(SecondaryButtonStyle())
+                    .disabled(working)
                 Spacer()
-                if working { ProgressView().controlSize(.small) }
-                Button("Connect") { redeem(pasted) }
+                if working { ConnectingStatus(app: app) }
+                Button(working ? "Connecting…" : "Connect") { redeem(pasted) }
                     .buttonStyle(PrimaryButtonStyle(tint: Palette.indigoBright))
                     .disabled(pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || working)
             }
+            .animation(Motion.standard, value: working)
         }
     }
 
@@ -337,6 +336,28 @@ struct SetUpServerFlow: View {
 }
 
 // MARK: - Pieces
+
+/// What a first connection is doing. Tor needs a while the first time, so say so instead of
+/// leaving a spinner to look stuck.
+struct ConnectingStatus: View {
+    let app: AppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(app.connection == .connecting ? "Reaching your server…" : "Connecting securely through Tor…")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Text("The first time can take a minute or two.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+        }
+        .foregroundStyle(.white)
+        .transition(.opacity)
+        .accessibilityElement(children: .combine)
+    }
+}
 
 struct OnboardingBackground: View {
     var body: some View {
