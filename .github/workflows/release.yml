@@ -1,0 +1,163 @@
+# Releases: every version tag (v1.2.0) becomes a GitHub release with a signed, notarized disk
+# image for Apple silicon and Intel, its checksum, and a provenance attestation that ties the
+# image to this workflow and commit. scripts/release.sh tags a version; docs/releasing.md has
+# the whole process, including the update manifest, which is signed offline afterwards.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing version tag to build again, e.g. v1.2.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: The tag is ready to release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Version, changelog and branch agree
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$TAG isn't a version tag like v1.2.0"; exit 1; }
+          version="${TAG#v}"
+          cargo="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          app="$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"/\1/p' apps/macos/project.yml)"
+          [ "$cargo" = "$version" ] || { echo "::error::Cargo.toml says $cargo, the tag $version"; exit 1; }
+          [ "$app" = "$version" ] || { echo "::error::apps/macos/project.yml says $app, the tag $version"; exit 1; }
+          tools/release/release-notes.sh "$version" > /dev/null
+          git merge-base --is-ancestor HEAD origin/main \
+            || { echo "::error::$TAG isn't on main; release from main only"; exit 1; }
+      - name: CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          for workflow in ci.yml macos.yml; do
+            for _ in $(seq 1 90); do
+              run="$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$sha" --workflow "$workflow" \
+                --event push --limit 1 --json status,conclusion,url -q '.[0] | "\(.status) \(.conclusion) \(.url)"')"
+              case "$run" in
+                "completed success "*) echo "✓ $workflow: ${run##* }"; break ;;
+                completed*) echo "::error::$workflow didn't pass on $sha: ${run##* }"; exit 1 ;;
+                "") echo "::error::$workflow never ran on $sha; release a commit that was pushed to main"; exit 1 ;;
+                *) echo "… $workflow is ${run%% *}"; sleep 60 ;;
+              esac
+            done
+            [[ "$run" == "completed success "* ]] || { echo "::error::$workflow didn't finish in time"; exit 1; }
+          done
+
+  release:
+    name: Build, sign, notarize and publish
+    needs: check
+    runs-on: xcode-27
+    timeout-minutes: 150
+    environment: release
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the provenance attestation
+      attestations: write
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0 # the build number counts commits
+          persist-credentials: false
+      - name: Tools (Rust pinned in rust-toolchain.toml, XcodeGen)
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal \
+            --target aarch64-apple-darwin --target x86_64-apple-darwin
+          command -v xcodegen >/dev/null || brew install xcodegen >/dev/null
+          sw_vers
+          xcodebuild -version
+      - name: Signing certificate (in a keychain that lasts only as long as this job)
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          [ -n "$CERTIFICATE" ] || { echo "::error::No signing secrets in the release environment: run tools/release/setup-signing.sh (docs/releasing.md)"; exit 1; }
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          password="$(openssl rand -hex 24)"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 7200 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" \
+            || { echo "::error::The certificate secret holds no Developer ID Application identity"; exit 1; }
+      - name: Notarization key
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_API_KEY }}
+        run: |
+          [ -n "$NOTARY_KEY" ] || { echo "::error::No notarization key in the release environment: run tools/release/setup-signing.sh"; exit 1; }
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          echo "ASIRI_NOTARY_KEY=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+      - name: Build, sign, notarize and package
+        env:
+          ASIRI_NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ASIRI_NOTARY_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
+        run: tools/release/make-release.sh --version "${TAG#v}" --require-notarization
+      - name: Provenance attestation
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/Asiri-*.dmg
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          tools/release/release-notes.sh "$version" > "$RUNNER_TEMP/notes.md"
+          assets=("dist/Asiri-$version.dmg" dist/SHA256SUMS.txt)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Asiri $version" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+          echo "### [Asiri $version](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG)" >> "$GITHUB_STEP_SUMMARY"
+          sed 's/^/    /' dist/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Forget the signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/release.keychain-db" 2> /dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/certificate.p12"
+      - name: Keep the build log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-build-log
+          path: build/release/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 14
