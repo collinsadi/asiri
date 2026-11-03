@@ -27,7 +27,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Àṣírí · Between us. Apache License 2.0.</string>
+	<string>Àṣírí · Between us. © 2026 Collins Adi, Apache License 2.0.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Asiri uses the camera to scan a friend's pairing code and for video calls. Nothing is recorded.</string>
 	<key>NSMicrophoneUsageDescription</key>
