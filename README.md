@@ -58,6 +58,9 @@ asiri/
 
 ## Getting started
 
+**Joining a friend's server?** Give your AI coding agent [`docs/agent-setup.md`](docs/agent-setup.md):
+it installs everything, builds and installs Asiri on your Mac, and walks you through pairing.
+
 ### Prerequisites
 
 * macOS 14 Sonoma or later (Apple silicon recommended) with Xcode 16 or later
