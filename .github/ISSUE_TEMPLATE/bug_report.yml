@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in Asiri, the relay or the deployment kit doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security problems go to [a private report](https://github.com/collinsadi/asiri/security/advisories/new), not here.**
+        Never paste pairing codes (`ASIRI1:…`), emoji, onion addresses, keys or message content into an issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Choose …
+        3. See …
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part of Asiri
+      options:
+        - Mac app
+        - Calls
+        - Pairing
+        - Relay or server
+        - Deployment kit (deploy-vps.sh, install.sh)
+        - Building or releasing
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Asiri version
+      description: Settings › About, or the commit you built (`git log -1 --format=%h`).
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 15.5 on Apple silicon
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Only the relevant lines, with identifiers removed.
+      render: text

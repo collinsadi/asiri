@@ -1,0 +1,25 @@
+# Weekly pull requests that keep the pinned dependencies current. Review each one like new code
+# (CONTRIBUTING.md): read the changelog, and let CI's cargo deny check pass before merging.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      crates:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: build
+      include: scope

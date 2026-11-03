@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/collinsadi/asiri/security/advisories/new
+    about: Privately, never in a public issue (SECURITY.md).
+  - name: Set up Asiri on a friend's Mac
+    url: https://github.com/collinsadi/asiri/blob/main/docs/agent-setup.md
+    about: The installation and pairing guide.

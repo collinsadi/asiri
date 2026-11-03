@@ -1,0 +1,20 @@
+name: Idea
+description: Something Asiri could do, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The problem, in terms of what you and your friends do with Asiri.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and security
+      description: Would it change what the server, your friends' Macs or anyone else could learn? The architecture's threat model is in docs/architecture.md §3.
