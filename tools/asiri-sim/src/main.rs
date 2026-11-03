@@ -31,7 +31,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run a development relay reached without Tor (docs/adr/0003) and print the code the
+    /// Run a development relay reached without Tor (ADR-0003) and print the code the
     /// first admin pastes into Asiri.
     Relay {
         /// Address to listen on; also the address the app dials.
@@ -161,13 +161,21 @@ async fn demo() -> anyhow::Result<()> {
     for who in [&ada, &ben, &cam] {
         println!();
         println!("── what {} sees ──", who.name);
+        let contacts = who.core.contacts()?;
         for chat in who.core.chats()? {
             println!("  [{}]", chat.title);
             for m in who.messages(&chat.chat.chat_id) {
+                // A friend's name, "me", or for lines nobody sent, their kind ("system").
                 let from = if m.outgoing {
                     "me".to_owned()
                 } else {
-                    format!("{:?}", m.kind).to_lowercase()
+                    contacts
+                        .iter()
+                        .find(|c| c.user_id == m.sender_user)
+                        .map_or_else(
+                            || format!("{:?}", m.kind).to_lowercase(),
+                            |c| c.display_name.clone(),
+                        )
                 };
                 println!("    {from:>8}: {}  ({:?})", m.body, m.status);
             }
