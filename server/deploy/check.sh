@@ -28,14 +28,9 @@ scripts=(
   "$here/install.sh"
   "$here/asiri-authsync"
   "$here/check.sh"
-  "$root/scripts/deploy-vps.sh"
-  "$root/scripts/ship.sh"
-  "$root/scripts/e2e.sh"
-  "$root/scripts/check-commit-message.sh"
-  "$root/scripts/ci/check-commits.sh"
-  "$root/tools/release/build-xcframework.sh"
-  "$root/tools/release/build-app.sh"
-  "$root/tools/release/make-release.sh"
+  "$root"/scripts/*.sh
+  "$root"/scripts/ci/*.sh
+  "$root"/tools/release/*.sh
   "$root/.githooks/commit-msg"
 )
 syntax=1
