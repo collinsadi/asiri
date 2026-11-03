@@ -70,6 +70,9 @@ arti-client = { version = "0.47", default-features = false, features = ["tokio",
 tor-rtcompat = { version = "0.47", default-features = false, features = ["tokio", "rustls"] }
 tor-hscrypto = { version = "0.47", default-features = false }
 tor-llcrypto = { version = "0.47", default-features = false }
+# Arti's TLS to Tor relays runs on rustls, which needs one process-wide crypto provider; Arti
+# leaves picking it to the application. ring: small, no cmake, and already in the lock file.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
 # FFI
 uniffi = { version = "0.32", features = ["tokio"] }

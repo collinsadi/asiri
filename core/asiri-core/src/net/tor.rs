@@ -22,6 +22,7 @@ pub struct Tor {
 impl Tor {
     /// Bootstraps Tor with its state under `data_dir/tor` ("Connecting securely…", §8.3).
     pub async fn start(data_dir: &Path) -> CoreResult<Arc<Self>> {
+        install_crypto_provider();
         let state = data_dir.join("tor").join("state");
         let cache = data_dir.join("tor").join("cache");
         std::fs::create_dir_all(&state)?;
@@ -57,6 +58,14 @@ impl Tor {
             .map(|_| ())
             .map_err(|e| CoreError::Network(format!("could not store the onion key: {e}")))
     }
+}
+
+/// Gives rustls, which Arti uses for TLS to Tor relays, its process-wide crypto provider.
+/// Arti leaves the choice to the application, and without one creating the Tor client panics.
+/// Choosing explicitly also keeps it working if a dependency ever enables a second provider.
+pub(crate) fn install_crypto_provider() {
+    // Fails only when a provider is already installed, which is just as good.
+    let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
 /// Dials the relay's onion service: port 80 for the relay, 7880 for call signaling.
@@ -106,5 +115,31 @@ impl Dialer for OnionDialer {
 
     fn is_anonymous(&self) -> bool {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use arti_client::config::TorClientConfigBuilder;
+    use arti_client::{BootstrapBehavior, TorClient};
+
+    /// Creating the Tor client sets up its TLS stack at once, and rustls needs a process-wide
+    /// crypto provider for that. Without one it panicked, so no build of Asiri could reach an
+    /// onion server. This needs no network: the client is never bootstrapped.
+    #[tokio::test]
+    async fn the_tor_client_starts() {
+        super::install_crypto_provider();
+        let dir = tempfile::tempdir().unwrap();
+        let config = TorClientConfigBuilder::from_directories(
+            dir.path().join("state"),
+            dir.path().join("cache"),
+        )
+        .build()
+        .unwrap();
+        TorClient::builder()
+            .config(config)
+            .bootstrap_behavior(BootstrapBehavior::Manual)
+            .create_unbootstrapped()
+            .expect("the Tor client starts");
     }
 }
