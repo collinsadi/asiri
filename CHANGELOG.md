@@ -7,6 +7,8 @@ All notable changes to Asiri are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
 The first release of Asiri, for macOS 14 Sonoma or later on Apple silicon and Intel.
 
 ### Messaging
@@ -42,3 +44,6 @@ The first release of Asiri, for macOS 14 Sonoma or later on Apple silicon and In
 - Asiri comes as a signed and notarized disk image that opens on an install window.
 - A Release workflow can build, attest and publish one for every version tag
   ([docs/releasing.md](https://github.com/collinsadi/asiri/blob/main/docs/releasing.md)).
+
+[Unreleased]: https://github.com/collinsadi/asiri/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/collinsadi/asiri/releases/tag/v0.1.0
