@@ -34,7 +34,7 @@ jobs:
           - { runner: macos-15, xcode: Xcode 16 }
           - { runner: xcode-27, xcode: Xcode 27 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Xcode
         run: sw_vers && xcodebuild -version && swift --version
       - name: Build
@@ -49,7 +49,7 @@ jobs:
         run: swift test --skip-build
       - name: Keep the snapshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-snapshots-${{ matrix.runner }}
           path: |
@@ -71,7 +71,7 @@ jobs:
           # The release core, exactly as scripts/ship.sh builds it.
           - { runner: xcode-27, xcode: Xcode 27, core: --host-only }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Toolchain (pinned in rust-toolchain.toml)
         run: |
           if ! command -v rustup >/dev/null; then
@@ -82,7 +82,7 @@ jobs:
           rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
           sw_vers
           xcodebuild -version
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: macos-${{ matrix.runner }}
       - name: Rust core → AsiriCoreFFI.xcframework and Swift bindings
@@ -133,7 +133,7 @@ jobs:
           hdiutil detach -quiet "$volume"
       - name: Keep the build log and screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-app-${{ matrix.runner }}
           path: |
