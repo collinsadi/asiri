@@ -67,9 +67,33 @@ jobs:
             [[ "$run" == "completed success "* ]] || { echo "::error::$workflow didn't finish in time"; exit 1; }
           done
 
+  signing:
+    name: Signing is set up
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: release
+    outputs:
+      ready: ${{ steps.secrets.outputs.ready }}
+    steps:
+      - id: secrets
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          NOTARY_KEY: ${{ secrets.NOTARY_API_KEY }}
+        run: |
+          if [ -n "$CERTIFICATE" ] && [ -n "$NOTARY_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            # Not a failure: until tools/release/setup-signing.sh has run, releases are built on
+            # the maintainer's Mac (docs/releasing.md, "Releasing from your Mac").
+            echo "::notice::The release environment has no signing secrets, so $TAG is left to the maintainer's Mac. Run tools/release/setup-signing.sh to have CI build releases."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: Build, sign, notarize and publish
-    needs: check
+    needs: [check, signing]
+    if: needs.signing.outputs.ready == 'true'
     runs-on: xcode-27
     timeout-minutes: 150
     environment: release
@@ -103,7 +127,6 @@ jobs:
           CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
         run: |
-          [ -n "$CERTIFICATE" ] || { echo "::error::No signing secrets in the release environment: run tools/release/setup-signing.sh (docs/releasing.md)"; exit 1; }
           keychain="$RUNNER_TEMP/release.keychain-db"
           password="$(openssl rand -hex 24)"
           printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
@@ -120,7 +143,6 @@ jobs:
         env:
           NOTARY_KEY: ${{ secrets.NOTARY_API_KEY }}
         run: |
-          [ -n "$NOTARY_KEY" ] || { echo "::error::No notarization key in the release environment: run tools/release/setup-signing.sh"; exit 1; }
           printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
           echo "ASIRI_NOTARY_KEY=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
       - name: Build, sign, notarize and package
