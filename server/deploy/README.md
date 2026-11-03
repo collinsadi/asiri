@@ -98,6 +98,9 @@ in short:
   them: messages, files and calls stay end-to-end encrypted.
 * `--lockdown` isn't available; close 22/tcp in your cloud firewall instead if you want SSH only
   over the admin onion.
+* The relay is compiled on the server. Its crates and build stay in Docker's build cache so
+  updates are quick; if the disk is tight, `sudo docker builder prune` frees them (the next update
+  then compiles from scratch).
 
 ## Onion-only SSH (`--lockdown`)
 
