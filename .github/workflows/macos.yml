@@ -1,7 +1,8 @@
 # The Mac app, on Xcode 16 (macOS 15) and on Xcode 27 (macOS 27): AsiriKit's tests with a
 # snapshot of every screen (kept as `ci-snapshots-*`), and the full app — Rust core, Swift
 # bridge, LiveKit calls — built by tools/release/build-app.sh exactly as scripts/ship.sh
-# builds it on your Mac, then launched.
+# builds it on your Mac, then launched, and packed into the disk image a release ships in
+# (with a picture of its install window in `ci-app-*`).
 name: macOS
 
 on:
@@ -119,6 +120,17 @@ jobs:
           tail -20 "$RUNNER_TEMP/live.log" || true
           screencapture -x "$RUNNER_TEMP/live.png" || true
           kill $! || true
+      - name: The disk image opens on its install window (tools/release/make-dmg.sh)
+        run: |
+          tools/release/make-dmg.sh "$RUNNER_TEMP/app/Asiri.app" "$RUNNER_TEMP/Asiri.dmg"
+          hdiutil attach -quiet -noautoopen "$RUNNER_TEMP/Asiri.dmg"
+          volume="$(find /Volumes -maxdepth 1 -name 'Asiri *' | head -1)"
+          open "$volume"
+          sleep 6
+          read -r id width height < <(swift scripts/ci/finder-window.swift)
+          echo "Finder opened $volume in a ${width}×${height} window"
+          screencapture -x -o -l "$id" "$RUNNER_TEMP/install-window.png" || true
+          hdiutil detach -quiet "$volume"
       - name: Keep the build log and screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -132,5 +144,6 @@ jobs:
             ${{ runner.temp }}/live.log
             ${{ runner.temp }}/demo.png
             ${{ runner.temp }}/live.png
+            ${{ runner.temp }}/install-window.png
           if-no-files-found: ignore
           retention-days: 14
