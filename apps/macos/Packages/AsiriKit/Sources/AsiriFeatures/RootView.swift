@@ -32,6 +32,12 @@ public struct RootView: View {
                 }
             }
         }
+        // Above every phase: errors while setting up or unlocking need saying as much as later.
+        .overlay(alignment: .top) {
+            ToastView(toast: app.toast)
+                .padding(.top, 10)
+                .animation(Motion.bouncy, value: app.toast)
+        }
         .overlay {
             if app.prefs.hideWhenInactive, !app.isActive, app.phase == .ready {
                 PrivacyCover()
@@ -76,11 +82,6 @@ struct MainView: View {
                     EmptyConversationView(app: app)
                 }
             }
-        }
-        .overlay(alignment: .top) {
-            ToastView(toast: app.toast)
-                .padding(.top, 10)
-                .animation(Motion.bouncy, value: app.toast)
         }
         .overlay(alignment: .top) {
             if let call = app.incomingCall {
