@@ -28,8 +28,9 @@ into this repository.
    AI assistant or bot. The `commit-msg` hook in [`.githooks/`](.githooks/) and CI both reject
    them.
 
-5. **Never commit secrets.** No keys, tokens, `.env` files, LiveKit secrets or onion-service keys.
-   `server/deploy/secrets/` is git-ignored for a reason.
+5. **Never commit secrets.** No keys, tokens, `.env` files, LiveKit secrets, onion-service keys
+   or the release key (only its public half, `tools/release/release-key.pub`, belongs here).
+   `.gitignore` covers the usual files, but check `git status` before you commit.
 
 Enable the hooks once per clone:
 
@@ -45,6 +46,19 @@ cargo test --workspace
 ./scripts/e2e.sh              # simulator suites, plus calls through LiveKit in Docker
 ./scripts/ship.sh             # everything, including the Mac app (macOS only)
 ```
+
+CI also runs these, so run the one your change touches before you push:
+
+```bash
+cargo clippy -p asiri-core --features tor --all-targets -- -D warnings   # the core with Tor
+cargo deny check                                  # advisories, licenses, sources, bans
+cargo run -q -p proto-gen && git diff --exit-code core/asiri-proto/src/gen   # after .proto changes
+sudo server/deploy/check.sh                       # the deployment kit and every script (Linux)
+tools/design/make-icon.py --check                 # after icon changes
+```
+
+[docs/security.md](docs/security.md#what-ci-proves-on-every-push) lists everything CI checks.
+Releases have their own process: [docs/releasing.md](docs/releasing.md).
 
 * **The Mac app** lives in Swift packages (`apps/macos/Packages`) so most of it builds and
   tests without Xcode projects or Rust: `cd apps/macos/Packages/AsiriKit && swift test`.
