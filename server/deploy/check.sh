@@ -78,6 +78,32 @@ for mode in open lockdown; do
   fi
 done
 
+# The preflight that keeps install.sh from firewalling a server that runs other services: on
+# `ss -Htlnp` output it must ignore SSH, LiveKit media and loopback, and name everything else.
+cat > "$work/ss.txt" <<'EOF'
+LISTEN 0      4096         0.0.0.0:22        0.0.0.0:*    users:(("sshd",pid=10,fd=3))
+LISTEN 0      4096            [::]:22           [::]:*    users:(("sshd",pid=10,fd=4))
+LISTEN 0      4096       127.0.0.1:8080      0.0.0.0:*    users:(("asiri-relay",pid=13,fd=9))
+LISTEN 0      4096       127.0.0.1:7880      0.0.0.0:*    users:(("livekit-server",pid=14,fd=8))
+LISTEN 0      4096               *:7881            *:*    users:(("livekit-server",pid=14,fd=9))
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:(("systemd-resolve",pid=16,fd=18))
+LISTEN 0      511            [::1]:6379         [::]:*    users:(("redis-server",pid=15,fd=9))
+EOF
+dedicated=$(awk -f "$here/public-services.awk" "$work/ss.txt")
+cat >> "$work/ss.txt" <<'EOF'
+LISTEN 0      511          0.0.0.0:443       0.0.0.0:*    users:(("nginx",pid=11,fd=7))
+LISTEN 0      511             [::]:443          [::]:*    users:(("nginx",pid=11,fd=10))
+LISTEN 0      511                *:3600            *:*    users:(("node",pid=12,fd=20))
+EOF
+shared=$(awk -f "$here/public-services.awk" "$work/ss.txt" | sort -n | paste -sd' ' -)
+if [ -n "$dedicated" ]; then
+  fail "preflight sees other services on a server that runs only Asiri: $dedicated"
+elif [ "$shared" != "443/tcp (nginx) 3600/tcp (node)" ]; then
+  fail "preflight should name nginx on 443 and node on 3600, but found: ${shared:-nothing}"
+else
+  ok "preflight tells a shared server from one that runs only Asiri"
+fi
+
 # Tor: the two onion services, with directories like install.sh creates them.
 if have tor && [ "$(id -u)" = 0 ]; then
   for svc in asiri admin; do

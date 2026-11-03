@@ -20,6 +20,8 @@ VPS
 
 * Debian 13, Ubuntu 24.04 or Ubuntu 26.04, 2 vCPUs, 4 GB RAM, 40 GB disk, a public IPv4
   address (§5.2).
+* Ideally nothing else running on it. A server that already runs other services needs
+  `--shared` ([below](#sharing-a-server-with-other-services---shared)).
 * SSH access with `sudo`.
 * Your cloud firewall (on AWS: the instance's **security group**) must allow inbound
   **7881/tcp** and **7882/udp** from anywhere, plus **22/tcp** from your own IP while you still
@@ -36,7 +38,10 @@ scripts/deploy-vps.sh ubuntu@<host> ~/path/to/key.pem
 
 The script uploads the committed source (`git archive HEAD`), then runs
 [`install.sh`](install.sh) as root. The first run takes a few minutes (Docker, tor, a Rust
-build). It is idempotent; run it again after pulling new commits to update. It prints:
+build). It is idempotent; run it again after pulling new commits to update. Before it changes
+anything, it stops if other services listen publicly (see `--shared` below), if another program
+holds one of Asiri's ports (8080, 7880, 7881/tcp, 7882/udp), or if tor is already configured for
+something else. It prints:
 
 * the **relay onion address** (also in `/var/lib/tor/asiri/hostname`),
 * the public IP LiveKit advertises for media,
@@ -69,6 +74,30 @@ ssh … sudo asiri-admin devices revoke <device_id>          # a lost Mac (§11.
 ssh … sudo asiri-admin policy set invite members           # let any member add friends
 ssh … sudo asiri-admin gc                                  # apply retention now
 ```
+
+## Sharing a server with other services (`--shared`)
+
+Asiri is meant to have a server to itself (architecture §15). On one that already runs a
+website or other containers, the installer refuses to go ahead and lists them, because Asiri's
+firewall admits only SSH and call media and would cut them off. To install alongside them, and
+for every update after that:
+
+```bash
+scripts/deploy-vps.sh ubuntu@<host> ~/path/to/key.pem --shared
+```
+
+`--shared` installs tor, the relay and LiveKit as usual, but leaves the machine's firewall,
+system logging and automatic-update settings as they are (and removes Asiri's firewall if an
+earlier install added one). [ADR-0006](../../docs/adr/0006-shared-servers.md) has the trade-offs;
+in short:
+
+* Your cloud firewall is the only filter in front of Asiri, so keep it narrow: Asiri itself needs
+  just **7881/tcp** and **7882/udp**.
+* Whoever gains root through another service on the machine sees what the relay sees (random IDs,
+  sizes, timing, the IP addresses of people in calls) and can hold messages back. They can't read
+  them: messages, files and calls stay end-to-end encrypted.
+* `--lockdown` isn't available; close 22/tcp in your cloud firewall instead if you want SSH only
+  over the admin onion.
 
 ## Onion-only SSH (`--lockdown`)
 

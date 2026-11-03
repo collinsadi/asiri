@@ -7,14 +7,15 @@
 #   scripts/deploy-vps.sh <user@host> <ssh-key> --status
 #   scripts/deploy-vps.sh <user@host> <ssh-key> --publish dist/latest.json dist/Asiri-1.2.0.dmg
 #
-# Install options are passed to server/deploy/install.sh: --public-ip IP, --lockdown.
+# Install options are passed to server/deploy/install.sh: --public-ip IP, --lockdown, and
+# --shared for a server that also runs other services (it leaves their firewall alone).
 # The committed HEAD of this repository is what gets deployed (git archive), and the relay is
 # built on the server from that source. Nothing about the server is stored in the repository.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 

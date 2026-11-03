@@ -1404,6 +1404,8 @@ Share these with everyone who uses Asiri:
 
 Jurisdiction and closeness can pull in opposite directions. Calls feel natural up to roughly 150 ms of round-trip delay, so pick the most privacy-friendly region that stays within that.
 
+Give Asiri a server of its own. A machine that already runs other services can host it with `install.sh --shared`, which leaves that machine's firewall and logging alone and so gives up part of [§14.2](#142-server); [ADR-0006](adr/0006-shared-servers.md) records what that costs.
+
 ### 15.2 Host layout
 
 ```text
