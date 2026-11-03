@@ -39,5 +39,6 @@ The first release of Asiri, for macOS 14 Sonoma or later on Apple silicon and In
 
 ### Releases
 
-- A signed and notarized disk image that opens on an install window. CI builds and publishes
-  it for every version tag, with a checksum and a provenance attestation.
+- Asiri comes as a signed and notarized disk image that opens on an install window.
+- A Release workflow can build, attest and publish one for every version tag
+  ([docs/releasing.md](https://github.com/collinsadi/asiri/blob/main/docs/releasing.md)).
