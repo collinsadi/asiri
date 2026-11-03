@@ -14,8 +14,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
 if [ $# -lt 2 ]; then
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  usage >&2
   exit 2
 fi
 
@@ -45,7 +47,7 @@ case "${1:-}" in
     exit 0
     ;;
   --publish)
-    # A release from tools/release/make-release.sh: the signed manifest and its disk image.
+    # A release: its manifest, signed offline (tools/release/sign-update.sh), and its disk image.
     manifest="${2:?--publish needs the signed manifest (latest.json)}"
     dmg="${3:?--publish needs the disk image}"
     [ -f "$manifest" ] && [ -f "$dmg" ] || { echo "manifest or disk image not found" >&2; exit 1; }
