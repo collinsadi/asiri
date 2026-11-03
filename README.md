@@ -101,6 +101,8 @@ scripts/deploy-vps.sh ubuntu@your-server your-key.pem --status
 ```
 
 The first command installs Docker, Tor, the relay and LiveKit, and locks the firewall down.
+If the server already runs other services, it stops and lists them instead; add `--shared` to
+install alongside them without touching their firewall ([ADR-0006](docs/adr/0006-shared-servers.md)).
 Calls also need TCP 7881 and UDP 7882 open in your cloud provider's firewall (an AWS security
 group, for example). In Asiri choose **Set up a server**: it shows the `--bootstrap` command
 with your Mac's key, and the code that command prints makes this Mac the server's admin.
