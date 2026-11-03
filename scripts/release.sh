@@ -5,24 +5,27 @@
 #  workflow, which waits for CI to pass on that commit, then builds, signs, notarizes and
 #  publishes the release (docs/releasing.md).
 #
-#    scripts/release.sh 1.2.0 [--dry-run]
+#    scripts/release.sh 1.2.0 [--dry-run | --no-push]
 #
 #  Write the release's notes under "## [Unreleased]" in CHANGELOG.md first, and run it on an
 #  up-to-date main with nothing uncommitted. --dry-run shows the changes and makes none.
+#  --no-push commits and tags but pushes nothing, for a release built on your Mac
+#  (docs/releasing.md, "Releasing from your Mac").
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 say() { printf '\033[1;35m▸\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-version="" dry_run=false
+version="" dry_run=false push=true
 for arg in "$@"; do
   case "$arg" in
     --dry-run) dry_run=true ;;
+    --no-push) push=false ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
     *) [ -z "$version" ] || { usage >&2; exit 2; }; version="$arg" ;;
@@ -87,6 +90,18 @@ if [ -n "$(git config --get user.signingkey || true)" ]; then
   git tag -s "$tag" -m "Asiri $version"
 else
   git tag -a "$tag" -m "Asiri $version"
+fi
+if ! $push; then
+  cat <<EOF
+
+Committed and tagged $tag here; nothing is pushed. Build it, then publish it:
+  tools/release/make-release.sh --notary-profile asiri --require-notarization --key …
+  git push origin main                 # and wait for CI to pass on it
+  git push origin $tag
+  gh release create $tag dist/Asiri-$version.dmg dist/SHA256SUMS.txt dist/latest.json --verify-tag \\
+    --title "Asiri $version" --notes-file <(tools/release/release-notes.sh $version --built-locally)
+EOF
+  exit 0
 fi
 say "Pushing main and $tag"
 git push --quiet --atomic origin main "$tag"

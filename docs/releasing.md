@@ -110,24 +110,43 @@ spctl --assess --type open --context context:primary-signature -v Asiri-1.2.0.dm
 |---|---|
 | CI failed on the release commit | Fix it on `main`, then release the next patch version. Never move a published tag |
 | The workflow failed after CI passed (Apple's notary service timed out, say) | Re-run the failed job from the Actions tab, or build the tag again with the workflow on `main`: `gh workflow run release.yml -f tag=v1.2.0` |
-| "No signing secrets in the release environment" | Run `tools/release/setup-signing.sh` (step 3 above) |
+| The workflow skipped the build: "no signing secrets" | Run `tools/release/setup-signing.sh` (step 3 above), then `gh workflow run release.yml -f tag=v1.2.0`. Or release from your Mac (below) |
 | Apple rejected the notarization | The job prints Apple's log; it names the file and the problem |
 | `sign-update.sh` says the app doesn't trust the key | The release was built without `release-key.pub`, or with another key. Release again with the right one |
 | The Developer ID certificate or API key leaked | Revoke it at Apple, make a new one, and run `setup-signing.sh` again |
 
 ## Releasing from your Mac
 
-If GitHub Actions is unavailable, the same script builds a release locally into `dist/`, signed
-with your certificate and notarized with the `asiri` profile:
+Until `setup-signing.sh` has run, or if GitHub Actions is down, build the release on your Mac.
+The Release workflow skips a tag it has no credentials to sign, so it stays out of the way.
 
-```bash
-tools/release/make-release.sh --notary-profile asiri --require-notarization \
-  [--key /Volumes/Offline/release.key]
-gh release create v1.2.0 dist/Asiri-1.2.0.dmg dist/SHA256SUMS.txt --verify-tag \
-  --title "Asiri 1.2.0" --notes-file <(tools/release/release-notes.sh 1.2.0)
-```
+1. Save your notarization credentials once, as the notarytool profile `asiri`. With an App Store
+   Connect API key:
 
-A local release has no provenance attestation, so say so in its notes.
+   ```bash
+   xcrun notarytool store-credentials asiri --key ~/Downloads/AuthKey_ABC123DEFG.p8 \
+       --key-id ABC123DEFG --issuer 01234567-89ab-cdef-0123-456789abcdef
+   ```
+
+   Or with your Apple ID and an app-specific password (account.apple.com › Sign-In and
+   Security › App-Specific Passwords), which it asks for:
+   `xcrun notarytool store-credentials asiri --apple-id you@example.com --team-id <your team ID>`.
+2. Commit and tag without pushing, then build from the tagged commit. Push the tag only once the
+   build has worked and CI has passed on the commit, so a failed build never leaves a published
+   tag behind:
+
+   ```bash
+   scripts/release.sh 1.2.0 --no-push
+   tools/release/make-release.sh --notary-profile asiri --require-notarization \
+     --key /Volumes/Offline/release.key
+   git push origin main                       # then wait for CI to pass on it
+   git push origin v1.2.0
+   gh release create v1.2.0 dist/Asiri-1.2.0.dmg dist/SHA256SUMS.txt dist/latest.json --verify-tag \
+     --title "Asiri 1.2.0" --notes-file <(tools/release/release-notes.sh 1.2.0 --built-locally)
+   ```
+
+   With `--key`, `make-release.sh` signs `latest.json` itself, so there's no `sign-update.sh`
+   step. A local release has no provenance attestation, and its notes say so.
 
 ## The install window
 
