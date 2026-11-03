@@ -107,19 +107,23 @@ in short:
 The architecture wants SSH reachable only through the admin onion service (§14.2). Do this only
 after you have confirmed it works, or keep your provider's web console as a break-glass option:
 
-1. On your Mac: `brew install tor`, then generate a client key pair:
+1. On your Mac: `brew install tor openssl@3 coreutils`, then generate a client key pair (the
+   `openssl` macOS ships is LibreSSL, which has no X25519, and `gbase32` comes with coreutils):
 
    ```bash
-   openssl genpkey -algorithm x25519 -out admin_onion.pem
-   openssl pkey -in admin_onion.pem -pubout -outform DER | tail -c 32 | base32 | tr -d '='   # public
-   openssl pkey -in admin_onion.pem -outform DER | tail -c 32 | base32 | tr -d '='          # private
+   openssl="$(brew --prefix openssl@3)/bin/openssl"
+   "$openssl" genpkey -algorithm x25519 -out admin_onion.pem
+   "$openssl" pkey -in admin_onion.pem -pubout -outform DER | tail -c 32 | gbase32 | tr -d '='   # public
+   "$openssl" pkey -in admin_onion.pem -outform DER | tail -c 32 | gbase32 | tr -d '='          # private
    ```
 
 2. On the server, put `descriptor:x25519:<PUBLIC>` into
    `/var/lib/tor/admin/authorized_clients/me.auth` (owner `debian-tor`, mode 600) and
    `sudo systemctl reload tor`.
-3. On your Mac, add `ClientOnionAuthDir /usr/local/etc/tor/onion_auth` to your torrc and create
-   `onion_auth/admin.auth_private` containing `<admin onion without .onion>:descriptor:x25519:<PRIVATE>`.
+3. On your Mac, add `ClientOnionAuthDir $(brew --prefix)/etc/tor/onion_auth` (written out in
+   full) to `$(brew --prefix)/etc/tor/torrc`, create `onion_auth/admin.auth_private` there
+   containing `<admin onion without .onion>:descriptor:x25519:<PRIVATE>`, and start tor with
+   `brew services start tor`.
 4. Test: `ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:9050 %h %p' ubuntu@<admin onion address>`.
 5. Only then: `scripts/deploy-vps.sh ubuntu@<host> key.pem --lockdown`, and remove 22/tcp from the
    security group.
