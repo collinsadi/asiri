@@ -8,6 +8,14 @@
 A private, end-to-end encrypted messenger for macOS, built for a small circle of friends,<br>
 with no third-party service in the middle.</p>
 
+<p align="center">
+  <a href="https://github.com/collinsadi/asiri/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/collinsadi/asiri?label=release&color=4F46E5"></a>
+  <a href="https://github.com/collinsadi/asiri/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/collinsadi/asiri/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/collinsadi/asiri/actions/workflows/macos.yml"><img alt="macOS" src="https://github.com/collinsadi/asiri/actions/workflows/macos.yml/badge.svg?branch=main"></a>
+  <img alt="macOS 14 or later" src="https://img.shields.io/badge/macOS-14%2B-14122B?logo=apple">
+  <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-4F46E5"></a>
+</p>
+
 ---
 
 Asiri lets a group of friends chat, share images and files, send voice notes, and make voice
@@ -20,16 +28,27 @@ from each chat’s MLS group.
 
 The full design lives in [`docs/architecture.md`](docs/architecture.md).
 
+## Install
+
+Download **Asiri-x.y.z.dmg** from the [latest release](https://github.com/collinsadi/asiri/releases/latest),
+open it, and drag Asiri onto the Applications folder. It runs on macOS 14 Sonoma or later, on
+Apple silicon and Intel, and it's signed with a Developer ID and notarized by Apple. Each
+release lists how to check that the download is the one CI built from this repository.
+
+**Joining a friend's server?** Give your AI coding agent [`docs/agent-setup.md`](docs/agent-setup.md):
+it installs Asiri on your Mac and walks you through pairing. To build Asiri yourself, see
+[Building from source](#building-from-source).
+
 ## Highlights
 
 | | |
 |---|---|
-| **One protocol for everything** | Every chat is an MLS group (a DM is a two-person group), suite `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (X25519 + ML-KEM-768). Handshake and application messages are always `PrivateMessage`s, padded to 256 bytes. |
+| **One protocol for everything** | Every chat is an MLS group (a DM is a two-person group), suite `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (X25519 + ML-KEM-768). Handshake and application messages are always `PrivateMessage`s, padded to a multiple of 256 bytes. |
 | **A relay that knows nothing** | Random device/inbox IDs and a random `group_route` are all it sees. One commit per epoch per group, in a single `BEGIN IMMEDIATE` transaction, keeps every member in lock-step. |
 | **No metadata leaks** | Messaging goes over embedded Tor (Arti) to an onion service that outsiders can’t even discover. No DNS, no CA, no push service, no analytics. |
 | **Verified in person** | Friends pair by scanning each other’s QR codes and comparing six emoji. A 60-digit safety number covers remote verification. |
-| **Encrypted at rest** | SQLCipher database whose key is wrapped by a Secure Enclave key; optional Touch ID app lock, duress PIN and panic wipe (crypto-shredding). |
-| **Invisible to screen capture** | Asiri's windows never appear in screenshots, screen recordings or screen sharing, its own included ([ADR-0007](docs/adr/0007-hidden-from-screen-capture.md)). |
+| **Encrypted at rest** | SQLCipher database whose key is wrapped by a Secure Enclave key when the build can use one (Settings › Security says so); optional Touch ID app lock, duress PIN and panic wipe (crypto-shredding). |
+| **Invisible to screen capture** | Asiri's windows are left out of screenshots, screen recordings and screen sharing, its own included ([ADR-0007](docs/adr/0007-hidden-from-screen-capture.md)). |
 | **Calls** | LiveKit SFU with AES-GCM frame encryption; call keys come from the MLS exporter and rotate with every epoch. |
 | **A chat UI you’ll want to live in** | Telegram-style timeline with tailed bubbles, patterned wallpaper, reactions with bursts, replies, edits, voice notes with waveforms, a ⌘K switcher, and fast spring animations that respect Reduce Motion. |
 
@@ -38,29 +57,28 @@ The full design lives in [`docs/architecture.md`](docs/architecture.md).
 ```text
 asiri/
 ├── Cargo.toml                 # Rust workspace: core, relay, tools
-├── proto/                     # Protocol Buffers: asiri.relay.v1, asiri.app.v1
+├── proto/                     # Protocol Buffers: asiri.relay.v1, asiri.app.v1, asiri.pairing.v1
 ├── core/
 │   ├── asiri-proto/           # generated protobuf code, shared by client and server
-│   ├── asiri-core/            # identity, mls, store, net, sync, media, calls, pairing, updater
+│   ├── asiri-core/            # identity, MLS, encrypted store, Tor and relay transport, the engine
 │   └── asiri-ffi/             # UniFFI bridge to Swift
 ├── server/
 │   ├── asiri-relay/           # axum relay + admin CLI
 │   └── deploy/                # docker compose, LiveKit, tor, nftables, systemd, installer
 ├── apps/macos/                # the native Mac app (SwiftUI) and its Swift packages
+├── design/icon/               # the icon's masters
 ├── tools/
 │   ├── asiri-sim/             # dev relay, headless clients, test buddy, malicious relay
 │   ├── asiri-release/         # the offline release key and signed update manifests
-│   ├── design/                # the app icon, drawn from code
+│   ├── design/                # the app icon and the install window, drawn from code
+│   ├── proto-gen/             # regenerates core/asiri-proto from proto/
 │   ├── uniffi-bindgen/        # pinned bindings generator
-│   └── release/               # XCFramework build and release packaging
-├── scripts/                   # dev, e2e and ship scripts
-└── docs/                      # architecture, threat model, ADRs, operations
+│   └── release/               # the core, the app, the disk image and releases
+├── scripts/                   # ship, e2e, deploy-vps, release, and CI's checks
+└── docs/                      # architecture and threat model, security notes, ADRs, guides
 ```
 
-## Getting started
-
-**Joining a friend's server?** Give your AI coding agent [`docs/agent-setup.md`](docs/agent-setup.md):
-it installs everything, builds and installs Asiri on your Mac, and walks you through pairing.
+## Building from source
 
 ### Prerequisites
 
@@ -128,13 +146,16 @@ cargo run -p asiri-sim -- demo                  # three simulated people chattin
 ### Releases
 
 ```bash
-cargo run -p asiri-release -- keygen --out release.key     # once; keep it offline
-tools/release/make-release.sh --version 1.2.0 --build 42 --key release.key --notary-profile asiri
+scripts/release.sh 1.2.0                                   # tag it: CI builds, signs, notarizes, publishes
+tools/release/sign-update.sh 1.2.0 --key /Volumes/Offline/release.key
 scripts/deploy-vps.sh ubuntu@your-server your-key.pem --publish dist/latest.json dist/Asiri-1.2.0.dmg
 ```
 
-Asiri checks for updates once a day through the relay, verifies the manifest against the
-release key built into the app and the disk image against the manifest, and then offers it.
+Every version tag becomes a GitHub release: a signed, notarized disk image that opens on an
+install window, with its checksum and a provenance attestation. Asiri checks for updates once a
+day through the relay, verifies the manifest against the release key built into the app and
+the disk image against the manifest, and then offers it. The release key stays offline; see
+[`docs/releasing.md`](docs/releasing.md).
 
 ## Status
 
