@@ -6,11 +6,11 @@
 | Field | Value |
 |---|---|
 | Document | Architecture and technical design |
-| Version | 0.1 (draft) |
-| Date | 1 November 2026 |
+| Version | 0.2 |
+| Date | 3 November 2026 |
 | Owner | Collins |
 | Platform | macOS 14 Sonoma or later |
-| Status | Proposed |
+| Status | Accepted, and built in Asiri 0.1.0 except where an ADR in [docs/adr](adr/) records a change. Unchecked items in §14 are still open |
 
 ---
 
@@ -203,7 +203,7 @@ Purely peer-to-peer messengers need both people online at the same time, and the
 | In-person pairing | AVFoundation camera + Vision (`VNDetectBarcodesRequest`); Core Image QR generator | Works with the MacBook's built-in camera |
 | Notifications | UserNotifications, local only | No Apple push service |
 | Server OS | Debian 13 (or Ubuntu 24.04 LTS) | Minimal install |
-| Relay server | Rust: `axum`, `tokio`, `rusqlite`, `prost`, `ed25519-dalek`, `livekit-api` (token minting) | One small binary |
+| Relay server | Rust: `axum`, `tokio`, `rusqlite`, `prost`, `ed25519-dalek`, `hmac` (LiveKit tokens, minted directly) | One small binary |
 | Tor on the server | C tor from the Tor Project's Debian repository | Mature onion-service hosting with restricted discovery |
 | Media server | LiveKit server (open source, self-hosted, single node) | No Redis needed for one node |
 | Server packaging | Docker Compose (relay, LiveKit), systemd (tor, helpers), nftables firewall | Images built on the server, not pulled from a third-party registry |
@@ -243,33 +243,31 @@ The Swift side owns everything the user sees and every Apple-specific service. T
 
 ### 6.2 Swift modules
 
+The app target (`apps/macos/Asiri`) and three Swift packages under `apps/macos/Packages`:
+
 | Module | Responsibility |
 |---|---|
-| `AppShell` | App lifecycle, windows, menu bar extra, launch at login, sleep and wake |
-| `ChatList` | Sidebar, search, filters, unread counts, pinned chats |
-| `Conversation` | AppKit timeline, composer, replies, reactions, edits, deletes |
-| `Media` | Attachment picker, drag and drop, paste, in-app viewer, metadata stripping, thumbnails |
-| `Calls` | LiveKit room, end-to-end key provider, call window, screen-share picker |
-| `Pairing` | QR generation and scanning, emoji confirmation |
-| `Settings` | Privacy, security, network, calls, about |
-| `SecurityKit` | Keychain, Secure Enclave key wrapping, Touch ID lock, duress PIN, panic wipe |
-| `Notify` | Local notifications with privacy levels |
-| `Updater` | Shows available updates and opens the verified installer |
+| `Asiri` (app target) | App lifecycle, the main, call and Settings windows, the menu bar extra, opening the database at launch, call coordination |
+| `AsiriFeatures` (AsiriKit) | Every screen and its state: startup and onboarding, the chat list and ⌘K switcher, the conversation timeline and composer, pairing, calls, settings, updates, app lock |
+| `AsiriDesign` (AsiriKit) | The design system: palette, bubbles, wallpaper, motion, QR codes, shared components |
+| `AsiriDomain` (AsiriKit) | The app's models and `CoreService`, the boundary to the engine, plus `PreviewCore` for previews, tests and demo mode |
+| `AsiriPlatform` (AsiriKit) | `KeyVault` (keychain and Secure Enclave key wrapping), the app lock, notifications, sleep and wake, launch at login, the camera, media preparation, the capture shield |
+| `AsiriBridge`, `AsiriCoreKit` (AsiriCoreBridge) | The Rust core through its UniFFI bindings: `LiveCore` implements `CoreService` |
+| `AsiriCalls` (AsiriCalls) | LiveKit call media: the room, end-to-end frame keys, video tiles, screen sharing |
 
 ### 6.3 Rust core modules
+
+`asiri-core` (`core/asiri-core/src`), exposed to Swift by `asiri-ffi`:
 
 | Module | Responsibility |
 |---|---|
 | `identity` | Device keys, credentials, fingerprints, safety numbers |
+| `ids` | Identifiers, randomness and time |
+| `crypto` | Building blocks outside MLS: attachment encryption, padding, emoji short authentication strings |
 | `mls` | OpenMLS wrapper: groups, key packages, commits, Welcomes, exporter secrets, admin-policy checks |
-| `store` | SQLCipher connection, schema migrations, FTS5 search index, OpenMLS storage |
-| `net` | Arti bootstrap, relay WebSocket client, HTTP over Tor, reconnects, call signaling bridge |
-| `sync` | Outbox and inbox pipelines, acknowledgements, retries, commit conflicts, gap detection |
-| `media` | Attachment encryption (STREAM), size padding, resumable upload and download |
-| `calls` | Call IDs, key derivation and rotation, LiveKit token requests |
-| `pairing` | QR payloads, invites, emoji short authentication strings |
-| `updater` | Fetches the release manifest over Tor and verifies its signature |
-| `ffi` | The UniFFI-exported API and event types |
+| `store` | SQLCipher connection, schema migrations, the FTS5 search index, OpenMLS storage |
+| `net` | Arti bootstrap and the onion dialer, the relay WebSocket client, HTTP, the call signaling bridge |
+| `engine` | The API the app and the simulator use. Its submodules: `connection` (the connection loop), `outbound` and `inbound` (the outbox and inbox pipelines, acknowledgements, gap detection), `groups`, `media`, `calls`, `pairing`, `admin`, `updater` (the release manifest, verified against the release key), `maintenance`, and the `events` and `views` handed to the app |
 
 ### 6.4 Concurrency and state
 
@@ -846,7 +844,11 @@ asiri-relay devices list                                # IDs, state, admin flag
 asiri-relay devices revoke <device_id>
 asiri-relay policy set invite admins|members
 asiri-relay gc                                          # apply the retention rules now
+asiri-relay release publish --manifest latest.json --file Asiri-1.2.0.dmg   # offer an update
 ```
+
+On a server installed by the deployment kit, run them as `sudo asiri-admin …`, and publish
+releases with `scripts/deploy-vps.sh … --publish` from your Mac ([docs/releasing.md](releasing.md)).
 
 ---
 
@@ -886,41 +888,26 @@ sequenceDiagram
 
 ### 10.3 LiveKit server configuration
 
-```yaml
-# /opt/asiri/livekit.yaml
-port: 7880                # signaling; published only on 127.0.0.1 and reached through the onion service
-rtc:
-  tcp_port: 7881          # TCP fallback for media (public)
-  udp_port: 7882          # single UDP port for all media (public)
-  use_external_ip: true   # advertise the VPS's public IP (or set node_ip explicitly)
-keys:
-  APIxxxxxxxxxx: "long-random-secret"   # used only by asiri-relay to mint tokens
-logging:
-  level: warn
-room:
-  empty_timeout: 60
-turn:
-  enabled: false          # not needed: native clients reach UDP 7882 or TCP 7881 directly
-```
+The installer renders [`server/deploy/livekit.yaml.template`](../server/deploy/livekit.yaml.template)
+into `/opt/asiri/livekit.yaml`:
+
+- Signaling on port 7880 listens on 127.0.0.1 only and is reached through the onion service.
+- All media uses one public UDP port (7882), with a TCP fallback on 7881. LiveKit advertises the
+  server's public IPv4 address (`node_ip`). There's no TURN: native clients reach those ports
+  directly.
+- The API key and secret are in a key file (`key_file`) that only LiveKit and the relay can
+  read. The relay uses them to mint tokens.
+- Rooms close 60 seconds after they empty, and hold at most 12 people. Logs are warnings only.
 
 ### 10.4 Minting call tokens on the relay
 
-```rust
-// Sketch using the livekit-api crate; check its docs for exact names.
-use livekit_api::access_token::{AccessToken, VideoGrants};
+A LiveKit access token is an HS256 JWT signed with the API secret, so the relay mints it
+directly with HMAC-SHA256 ([`server/asiri-relay/src/livekit.rs`](../server/asiri-relay/src/livekit.rs))
+rather than pulling in the LiveKit server SDK and its dependencies. Each token:
 
-let token = AccessToken::with_api_key(&lk_api_key, &lk_api_secret)
-    .with_identity(&random_alias)                 // never a device ID or a person's name
-    .with_ttl(std::time::Duration::from_secs(600))
-    .with_grants(VideoGrants {
-        room_join: true,
-        room: room_alias.clone(),
-        can_publish: true,
-        can_subscribe: true,
-        ..Default::default()
-    })
-    .to_jwt()?;
-```
+- names a random alias as its identity, never a device ID or a person's name;
+- grants joining one room, by its alias, with publishing, subscribing and data;
+- expires after 10 minutes.
 
 ### 10.5 Client setup with end-to-end encryption
 
@@ -1361,7 +1348,7 @@ message ServerMove { string onion_address = 1; }  // accepted only from group ad
 - [ ] Optional disk encryption (LUKS). It protects drives the provider retires; it doesn't stop a provider with live access, which is why the server only holds ciphertext.
 - [ ] Logs kept in RAM only (`Storage=volatile`), no access logs, tor's `SafeLogging` on.
 - [ ] Backups contain only onion-service keys and configuration, encrypted and kept offline. Never messages.
-- [ ] Secrets such as the LiveKit API secret live in root-only files (mode 600), never in the repository.
+- [ ] Secrets such as the LiveKit API secret live in files only root and the containers' secrets group can read (mode 640), never in the repository.
 - [ ] Container images pinned and rebuilt monthly.
 - [ ] Disk usage and service health visible to admins in Settings → Server.
 
@@ -1422,88 +1409,46 @@ VPS (Debian 13)
 
 ### 15.3 tor configuration
 
-```text
-# /etc/tor/torrc
-SocksPort 0
+The installer renders [`server/deploy/torrc.template`](../server/deploy/torrc.template) into
+`/etc/tor/torrc`. tor runs two onion services and no SOCKS port:
 
-HiddenServiceDir /var/lib/tor/asiri/
-HiddenServicePort 80 127.0.0.1:8080
-HiddenServicePort 7880 127.0.0.1:7880
-# Restricted discovery: one file per authorized device in
-#   /var/lib/tor/asiri/authorized_clients/<device>.auth
-# each containing one line:
-#   descriptor:x25519:<base32-encoded public key>
+- **`asiri`** forwards port 80 to the relay (127.0.0.1:8080) and 7880 to LiveKit's signaling.
+  It uses restricted discovery: one file per authorized device in
+  `/var/lib/tor/asiri/authorized_clients/<device>.auth`, which `asiri-authsync` maintains
+  ([§15.6](#156-syncing-authorized-onion-clients)).
+- **`admin`** forwards port 22 to SSH, for the admin's own client key only.
 
-HiddenServiceDir /var/lib/tor/admin/
-HiddenServicePort 22 127.0.0.1:22
-# The admin's own client key goes in /var/lib/tor/admin/authorized_clients/
-```
-
-To reach SSH over the onion service, the admin runs a tor client on their Mac with the matching private key in its `ClientOnionAuthDir`, and connects through tor's SOCKS port (for example with `ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p`).
+To reach SSH over the onion service, the admin runs a tor client on their Mac with the matching
+private key in its `ClientOnionAuthDir` and connects through tor's SOCKS port, as
+[server/deploy/README.md](../server/deploy/README.md) describes. Logging is minimal and
+`SafeLogging` is on.
 
 ### 15.4 Docker Compose
 
-```yaml
-# /opt/asiri/docker-compose.yml
-services:
-  relay:
-    build: ./asiri-relay                 # built on the server from your own source
-    restart: unless-stopped
-    network_mode: host
-    user: "10001:10001"
-    read_only: true
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    environment:
-      ASIRI_LISTEN: "127.0.0.1:8080"
-      ASIRI_LIVEKIT_KEYS_FILE: /run/secrets/livekit_keys
-    volumes:
-      - ./data/relay:/var/lib/asiri               # SQLite database and encrypted files
-      - ./data/authorized:/var/lib/asiri-authorized  # desired onion client keys
-    secrets:
-      - livekit_keys
+[`server/deploy/docker-compose.yml`](../server/deploy/docker-compose.yml) runs two containers:
 
-  livekit:
-    image: livekit/livekit-server:vX.Y.Z  # pin an exact version, ideally by digest
-    restart: unless-stopped
-    network_mode: host
-    command: --config /etc/livekit.yaml
-    read_only: true
-    security_opt: ["no-new-privileges:true"]
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
+- **relay**: built on the server from your own source with
+  [`relay.Dockerfile`](../server/deploy/relay.Dockerfile), never pulled from a registry. It
+  listens on 127.0.0.1:8080 and keeps its SQLite database and encrypted files in
+  `/opt/asiri/data/relay`.
+- **livekit**: the official image, pinned to an exact version and re-pinned monthly
+  ([§14.2](#142-server)).
 
-secrets:
-  livekit_keys:
-    file: ./secrets/livekit_keys          # chmod 600
-```
-
-- Both containers use host networking. LiveKit recommends it for media performance, and it keeps the firewall simple: Docker's published-port rules can bypass the host firewall.
-- Pulling the official LiveKit image is a one-time download from Docker Hub. If you'd rather avoid that, build LiveKit from source on the server.
+Both run as unprivileged users that share only the secrets group, with read-only root file
+systems, every capability dropped and `no-new-privileges`. Both use host networking. LiveKit
+recommends it for media performance, and it keeps the firewall simple, because Docker's
+published-port rules can bypass the host firewall. Pulling the LiveKit image is a one-time
+download from Docker Hub. If you'd rather avoid that, build LiveKit from source on the server.
 
 ### 15.5 Firewall
 
-```text
-# /etc/nftables.conf
-table inet filter {
-  chain input {
-    type filter hook input priority 0; policy drop;
-    iif "lo" accept
-    ct state established,related accept
-    meta l4proto { icmp, ipv6-icmp } accept
-    tcp dport 7881 accept   # LiveKit media over TCP
-    udp dport 7882 accept   # LiveKit media over UDP
-  }
-  chain forward {
-    type filter hook forward priority 0; policy drop;
-  }
-  chain output {
-    type filter hook output priority 0; policy accept;
-  }
-}
-```
-
-Nothing listens publicly for messaging or SSH. tor only makes outbound connections.
+[`server/deploy/nftables-asiri.nft`](../server/deploy/nftables-asiri.nft) is its own nftables
+table (`inet asiri`), so Docker's rules are untouched. It drops incoming traffic by default and
+admits only loopback, replies, ICMP, and LiveKit media on 7881/tcp and 7882/udp. SSH on 22/tcp
+stays open until `install.sh --lockdown`, which you run once SSH over the admin onion service
+works. After that, nothing listens publicly for messaging or SSH, and tor only makes outbound
+connections. On a server shared with other services, `--shared` leaves the firewall out
+([ADR-0006](adr/0006-shared-servers.md)).
 
 ### 15.6 Syncing authorized onion clients
 
@@ -1553,11 +1498,13 @@ The relay never gets write access to tor's own directory. The script is the only
 ### 16.1 Building and signing
 
 1. Build the Rust core for Apple silicon and Intel and combine it into an XCFramework (`xcodebuild -create-xcframework`). Generate the Swift bindings with `uniffi-bindgen`.
-2. Archive the app in Xcode with Hardened Runtime and the entitlements in [§6.9](#69-sandbox-entitlements-and-permissions).
+2. Build the app in Release with Hardened Runtime and the entitlements in [§6.9](#69-sandbox-entitlements-and-permissions).
 3. Sign with a Developer ID Application certificate (needs a paid Apple Developer account).
 4. Notarize with `xcrun notarytool submit --wait`, then staple the ticket with `xcrun stapler staple`. Notarization sends the app binary to Apple for an automated malware check. No user data is involved.
-5. Package a DMG and compute its SHA-256 hash.
+5. Package a DMG that opens on an install window (the app, and the Applications folder to drag it onto), sign, notarize and staple it too, and compute its SHA-256 hash.
 6. Sign a release manifest with the offline Ed25519 release key.
+
+The Release workflow does steps 1–5 for every version tag on a fresh CI runner and publishes the result as a GitHub release, with a build provenance attestation. Step 6 happens afterwards on the maintainer's Mac, which keeps the release key off the internet ([ADR-0008](adr/0008-releases-from-ci.md), [docs/releasing.md](releasing.md)).
 
 ```json
 {
@@ -1588,35 +1535,42 @@ The relay never gets write access to tor's own directory. The script is the only
 
 ## 17. Repository layout
 
-One Cargo workspace at the root covers the core, the relay and the tools, so the shared protocol crate is built once.
+One Cargo workspace at the root covers the core, the relay and the tools, so the shared protocol crate is built once. The Mac app's code lives in Swift packages, so most of it builds and tests without Xcode projects or Rust.
 
 ```text
 asiri/
-|-- Cargo.toml                    # workspace: core/*, server/asiri-relay, tools/asiri-sim
+|-- Cargo.toml                    # workspace: core/*, server/asiri-relay, tools/*
 |-- apps/
 |   '-- macos/
-|       |-- Asiri.xcodeproj
-|       |-- Asiri/                # app target: AppShell, scenes, entitlements, Info.plist
+|       |-- project.yml           # XcodeGen spec (Asiri.xcodeproj is generated, not committed)
+|       |-- Asiri/                # app target: scenes, launcher, calls, entitlements, Info.plist
 |       |-- Packages/
-|       |   |-- AsiriUI/          # SwiftUI and AppKit components, design tokens
-|       |   |-- AsiriFeatures/    # ChatList, Conversation, Calls, Pairing, Settings
-|       |   '-- AsiriPlatform/    # SecurityKit, Notify, Updater, LiveKit glue
-|       '-- Frameworks/
-|           '-- AsiriCoreFFI.xcframework   # built from core/
+|       |   |-- AsiriKit/         # AsiriFeatures, AsiriDesign, AsiriDomain, AsiriPlatform
+|       |   |-- AsiriCoreBridge/  # the Rust core through UniFFI
+|       |   '-- AsiriCalls/       # LiveKit call media
+|       '-- Frameworks/           # AsiriCoreFFI.xcframework, built from core/ (not committed)
 |-- core/
-|   |-- asiri-core/               # identity, mls, store, net, sync, media, calls, pairing, updater
+|   |-- asiri-core/               # identity, ids, crypto, mls, store, net, engine
 |   |-- asiri-ffi/                # UniFFI exports
 |   '-- asiri-proto/              # generated Protocol Buffers code, shared with the server
 |-- server/
 |   |-- asiri-relay/              # axum relay and admin CLI
-|   '-- deploy/                   # docker-compose.yml, livekit.yaml, torrc, nftables.conf, systemd units
-|-- proto/                        # .proto sources: app.v1, relay.v1
+|   '-- deploy/                   # installer, docker-compose.yml, LiveKit, torrc, nftables, systemd units
+|-- proto/                        # .proto sources: app.v1, relay.v1, pairing.v1
+|-- design/icon/                  # the icon's masters
 |-- tools/
-|   |-- asiri-sim/                # headless test clients for integration and load tests
-|   '-- release/                  # build-xcframework.sh, notarize.sh, sign-manifest
+|   |-- asiri-sim/                # development relay, headless clients, test buddy, malicious relay
+|   |-- asiri-release/            # the offline release key and signed update manifests
+|   |-- design/                   # the icon and the install window, drawn from code
+|   |-- proto-gen/                # regenerates core/asiri-proto from proto/
+|   |-- uniffi-bindgen/           # pinned bindings generator
+|   '-- release/                  # the core, the app, the disk image, releases and their signing
+|-- scripts/                      # ship.sh, e2e.sh, deploy-vps.sh, release.sh, CI's checks
 '-- docs/
-    |-- architecture.md           # this document
-    |-- threat-model.md
+    |-- architecture.md           # this document; the threat model is §3
+    |-- security.md               # how the code meets the threat model, and what CI proves
+    |-- releasing.md              # how a version is released
+    |-- agent-setup.md            # installing Asiri on a friend's Mac, for an AI agent
     '-- adr/                      # architecture decision records
 ```
 
@@ -1707,7 +1661,7 @@ Until M4 and the audit are done, use Asiri only with test data. Before then it w
 5. **Backups.** Offer an optional passphrase-encrypted export, or keep "no backups" as a deliberate feature?
 6. **Defaults.** Read receipts on or off? A default disappearing timer?
 7. **Group size.** Is a 50-member limit enough?
-8. **Open source.** Publishing the code invites review. Security shouldn't depend on keeping the design secret.
+8. **Open source.** Settled: the code is public under the Apache License 2.0, which invites review. Security doesn't depend on keeping the design secret.
 9. **Hosting.** Which jurisdiction and payment method for the VPS?
 10. **Audit.** What budget and timing?
 
