@@ -52,7 +52,7 @@ hkdf = "0.12"
 hmac = "0.12"
 subtle = "2.6"
 zeroize = { version = "1.8", features = ["derive"] }
-getrandom = { version = "0.3", features = ["std"] }
+getrandom = { version = "0.4", features = ["std"] }
 
 # Async, networking
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "signal"] }
